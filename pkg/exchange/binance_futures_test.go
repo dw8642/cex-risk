@@ -2,6 +2,7 @@ package exchange
 
 import (
 	"encoding/json"
+	"net/http"
 	"testing"
 	"time"
 
@@ -463,12 +464,13 @@ func TestApplyOptionsEmpty(t *testing.T) {
 // TestHandleListenKeyExpired 测试 listenKey 过期事件触发重连
 func TestHandleListenKeyExpired(t *testing.T) {
 	adapter := &BinanceFuturesAdapter{
-		opts:       &AdapterOptions{AccountID: "acc-test"},
+		opts:       &AdapterOptions{AccountID: "acc-test", WSEndpoint: "wss://fstream.binance.com", RESTEndpoint: "https://fapi.binance.com"},
 		tradeCh:    make(chan models.TradeEvent, 10),
 		positionCh: make(chan models.PositionSnapshot, 10),
 		balanceCh:  make(chan models.BalanceSnapshot, 10),
 		accountCh:  make(chan models.AccountUpdate, 10),
 		stopCh:     make(chan struct{}),
+		restClient: &http.Client{Timeout: 1 * time.Second},
 	}
 	adapter.logger, _ = newTestLogger()
 
@@ -477,7 +479,7 @@ func TestHandleListenKeyExpired(t *testing.T) {
 		"e": "listenKeyExpired",
 		"E": time.Now().UnixMilli(),
 	})
-	// 不 panic 即为通过
+	// 不 panic 即为通过（reconnect 会失败但不会 panic）
 	adapter.handleWSMessage(msg)
 	time.Sleep(50 * time.Millisecond) // 给 goroutine 启动时间
 }
