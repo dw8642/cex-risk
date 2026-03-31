@@ -1,0 +1,23 @@
+D1 下午任务已完成。总结：
+
+**已实现的代码（此前已存在，本次验证通过）：**
+
+1. **`pkg/exchange/adapter.go`** — `Adapter` 接口（10 个方法）、`AdapterFactory` + `Registry` 注册模式、`Option` 模式（`WithWSEndpoint`, `WithRESTEndpoint`, `WithHTTPProxy`, `WithAccountID`, `WithDebug`）、`Create()` 工厂方法、`UnsupportedExchangeError` 错误类型
+
+2. **`pkg/exchange/binance_futures.go`** — 币安合约适配器完整实现：
+   - WS 连接 `wss://fstream.binance.com/ws/{listenKey}`
+   - listenKey 管理（`POST /fapi/v1/listenKey` 创建，`PUT` 续期）
+   - 30 分钟心跳保活（`keepAliveLoop`）
+   - 指数退避重连（1s→2s→4s→8s...→30s，最多 10 次）
+   - `ORDER_TRADE_UPDATE` / `ACCOUNT_UPDATE` / `listenKeyExpired` 事件分发
+   - REST 签名请求（HMAC-SHA256）、仓位/余额/权限查询
+   - HTTP 代理支持
+
+3. **`pkg/exchange/binance_futures_test.go`** — 18 个单元测试全部通过
+
+**本次修复：** `TestHandleListenKeyExpired` 测试因 `restClient` 未初始化导致 nil pointer panic，已补充 `restClient` 和必要的 `opts` 字段。
+
+**验证结果：**
+- `go build ./...` — 编译通过
+- `go test ./... -v` — 全部 18 个测试通过
+- 已 commit 到 `agent-b/current` 分支
