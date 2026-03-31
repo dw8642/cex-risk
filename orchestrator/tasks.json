@@ -1,0 +1,191 @@
+{
+  "meta": {
+    "project": "CEX 风控系统",
+    "total_days": 40,
+    "agents": {
+      "a": { "name": "Agent-A", "role": "Backend Core", "worktree": "cex-risk-agent-a", "branch": "agent-a/current" },
+      "b": { "name": "Agent-B", "role": "Exchange",     "worktree": "cex-risk-agent-b", "branch": "agent-b/current" },
+      "c": { "name": "Agent-C", "role": "Risk Engine",  "worktree": "cex-risk-agent-c", "branch": "agent-c/current" },
+      "d": { "name": "Agent-D", "role": "Frontend",     "worktree": "cex-risk-agent-d", "branch": "agent-d/current" },
+      "e": { "name": "Agent-E", "role": "Infra/DevOps", "worktree": "cex-risk-agent-e", "branch": "agent-e/current" }
+    }
+  },
+  "versions": [
+    {
+      "name": "最小闭环",
+      "tag": "v0.1.0-poc",
+      "days": ["D1", "D2", "D3"]
+    },
+    {
+      "name": "MVP",
+      "tag": "v0.2.0-mvp",
+      "days": ["D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D13"]
+    },
+    {
+      "name": "V1.0",
+      "tag": "v1.0.0",
+      "days": ["D14", "D15", "D16", "D17", "D18", "D19", "D20", "D21", "D22", "D23", "D24", "D25", "D26", "D27", "D28"]
+    },
+    {
+      "name": "V2.0",
+      "tag": "v2.0.0",
+      "days": ["D29", "D30", "D31", "D32", "D33", "D34", "D35", "D36", "D37", "D38", "D39", "D40"]
+    }
+  ],
+  "days": {
+    "D1": {
+      "title": "项目骨架 + 基础设施",
+      "goal": "go build 通过，存储层可连接，WS 可握手",
+      "tasks": [
+        {
+          "id": "D1-A1",
+          "agent": "a",
+          "type": "blocker",
+          "phase": "morning",
+          "title": "项目骨架 + 公共包基础",
+          "prompt": "你是 Agent-A（Backend Core）。请执行 D1 上午任务。\n\n请按以下顺序实现，每完成一个模块就 commit：\n\n1. 检查现有 go.mod 是否正确（module github.com/cex-risk/cex-risk, go 1.22）\n2. pkg/config/config.go: TOML 配置加载，结构体覆盖 System/Database/ClickHouse/Redis/Kafka/Binance/Telegram/Twilio/RiskEngine。所有公共函数加中文注释。\n3. pkg/logger/logger.go: zap 初始化，支持 debug/production 模式切换。加中文注释。\n4. pkg/models/:\n   - entities.go: Account（含 project_id/team_id/strategy_id nullable），Project, Team, Strategy\n   - events.go: TradeEvent, PositionSnapshot, BalanceSnapshot，各带 Marshal()\n   - risk.go: RiskEvent(含 P0-P3 级别), RuleConfig\n5. pkg/store/:\n   - mysql.go: 连接 + accounts/risk_events/risk_rules 基础 CRUD\n   - redis.go: 连接 + position/balance/freshness 读写\n   - clickhouse.go: 连接 placeholder\n   - store.go: 统一 Store aggregator\n6. pkg/mq/:\n   - producer.go: Kafka producer, Publish/PublishBatch，带重试\n   - consumer.go: Kafka consumer group, 带 commit-on-success\n\n代码规范：\n- 所有公共函数和结构体必须有中文注释\n- 错误处理：不用 recover() 兜底，所有 error 必须显式检查，用 fmt.Errorf 包装上下文\n- 参数校验放在函数入口，提前返回\n\n每个模块写完后立即写对应的 _test.go 单元测试。\n完成后运行 go build ./... 和 go test ./... 确认全部通过。",
+          "acceptance": "go build ./... 通过 + go test ./... 全部 PASS",
+          "files_owned": ["pkg/**", "scripts/**", "cmd/**"],
+          "depends_on": []
+        },
+        {
+          "id": "D1-A2",
+          "agent": "a",
+          "type": "parallel",
+          "phase": "morning",
+          "title": "Kafka 封装 + 健康检查",
+          "prompt": "继续 D1 任务。完成 pkg/mq/ 的 Kafka producer 和 consumer 封装，以及 cmd/healthcheck/main.go 健康检查工具。\n\n健康检查需要验证：MySQL 连接 + 表存在、Redis 连接 + PING、Kafka broker 连通、ClickHouse 连接（可选）。\n\n加中文注释，写单元测试。",
+          "acceptance": "go run cmd/healthcheck/main.go 连接 MySQL/Redis/Kafka 成功",
+          "files_owned": ["pkg/mq/**", "cmd/healthcheck/**"],
+          "depends_on": ["D1-A1"]
+        },
+        {
+          "id": "D1-B1",
+          "agent": "b",
+          "type": "half_day_dep",
+          "phase": "afternoon",
+          "title": "Exchange Adapter 接口 + WS 客户端",
+          "prompt": "你是 Agent-B（Exchange）。请执行 D1 下午任务。\n\nAgent-A 已完成 pkg/config, pkg/models, pkg/store, pkg/mq，你可以直接 import 使用。\n\n请实现：\n\n1. pkg/exchange/adapter.go:\n   - ExchangeAdapter interface（Connect, SubscribeTrades, SubscribePositions, SubscribeBalances, SubscribeAccountUpdates, GetPositions, GetBalances, GetAPIKeyPermissions, Close, ExchangeID, MarketType）\n   - AdapterFactory + Registry 模式\n   - Option 模式配置（WithWSEndpoint, WithRESTEndpoint, WithHTTPProxy 等）\n\n2. pkg/exchange/binance_futures.go:\n   - 币安合约 WS 连接（wss://fstream.binance.com/ws）\n   - listenKey 管理（POST /fapi/v1/listenKey）\n   - 心跳保活（30分钟续期 listenKey）\n   - 断线自动重连（指数退避: 1s, 2s, 4s, 8s, max 30s）\n   - USER_DATA stream 事件分发\n\n代码规范：\n- 所有公共函数和接口必须有中文注释\n- 错误处理不用 recover 兜底，显式检查所有 error\n- 入口处做参数校验\n\n写对应的 _test.go 单元测试。\n完成后 go build ./... 和 go test ./pkg/exchange/... 确认通过。",
+          "acceptance": "WS 连接币安 testnet 成功，收到 trade 推送",
+          "files_owned": ["pkg/exchange/**", "services/exchange-ingestor/**"],
+          "depends_on": ["D1-A1"]
+        }
+      ],
+      "acceptance_gate": "go build ./... 通过 + go run cmd/healthcheck/main.go 连通 + WS 收到币安推送",
+      "merge_sequence": ["D1-A1", "D1-A2", "D1-B1"]
+    },
+    "D2": {
+      "title": "数据采集 + 指标计算 + 规则实现",
+      "goal": "Kafka 中有数据，Redis 中有指标，两条规则实现完毕",
+      "tasks": [
+        {
+          "id": "D2-B1",
+          "agent": "b",
+          "type": "blocker",
+          "phase": "morning",
+          "title": "BinanceFuturesAdapter + Ingestor 主循环",
+          "prompt": "你是 Agent-B（Exchange）。请执行 D2 上午任务。\n\n实现 BinanceFuturesAdapter 完整版：\n1. SubscribeTrades: 解析 ORDER_TRADE_UPDATE 中 TRADE 执行类型 → 构造 TradeEvent → Kafka\n2. SubscribePositions: 解析 ACCOUNT_UPDATE → 构造 PositionSnapshot → Kafka\n3. SubscribeBalances: 解析 ACCOUNT_UPDATE → 构造 BalanceSnapshot → Kafka\n4. SubscribeAccountUpdates: listenKey userData stream 统一分发\n\n实现 Exchange Ingestor 主循环（services/exchange-ingestor/）：\n- 从 MySQL 加载 active 账户\n- 为每个账户创建 Adapter + 启动订阅\n- WS 事件 → 解析 → 发布到对应 Kafka topic\n- Graceful shutdown\n\n中文注释 + 错误显式处理 + 单元测试。",
+          "acceptance": "Kafka risk_trade_events / risk_position_snapshots / risk_balance_snapshots 有数据",
+          "files_owned": ["pkg/exchange/**", "services/exchange-ingestor/**"],
+          "depends_on": ["D1-B1"]
+        },
+        {
+          "id": "D2-A1",
+          "agent": "a",
+          "type": "parallel",
+          "phase": "morning",
+          "title": "Rule interface 定义 + 规则注册表",
+          "prompt": "你是 Agent-A（Backend Core）。请执行 D2 上午任务。\n\n实现规则引擎基础框架：\n1. services/risk-engine/alert/rules/rule.go:\n   - Rule interface: Name(), Code(), Check(ctx, account, store) ([]RiskEvent, error)\n   - RuleRegistry: 注册/获取/列出所有规则\n   - 全局 DefaultRegistry\n\n中文注释 + 单元测试。这个接口将由 Agent-C 实现具体规则。",
+          "acceptance": "Rule interface 定义完成，Registry 测试通过",
+          "files_owned": ["services/risk-engine/alert/rules/rule.go", "services/risk-engine/alert/rules/registry.go"],
+          "depends_on": []
+        },
+        {
+          "id": "D2-C1",
+          "agent": "c",
+          "type": "parallel",
+          "phase": "morning",
+          "title": "P-001 + S-013 规则实现",
+          "prompt": "你是 Agent-C（Risk Engine）。请执行 D2 上午任务。\n\n实现两条核心规则（不依赖实时数据，可并行开发）：\n\n1. services/risk-engine/alert/rules/p001.go — P-001 提币权限异常检测:\n   - 检查 API Key 的 enableWithdrawals 权限\n   - 触发条件：权限为 true\n   - 产出：P1 级别 RiskEvent\n   - 中文注释说明规则逻辑\n\n2. services/risk-engine/alert/rules/s013.go — S-013 系统失明/数据断流检测:\n   - 检查 Redis 中的 freshness 时间戳\n   - 触发条件：任何数据维度超过阈值（默认 30s）未更新\n   - 产出：P0 级别 RiskEvent（系统失明是最高优先级）\n   - 中文注释说明规则逻辑\n\n每条规则必须实现 Rule interface（Name, Code, Check）。\n每条规则必须有完整的单元测试（正常/边界/异常路径）。\n错误处理不用 recover，显式检查。",
+          "acceptance": "P-001/S-013 单测通过，覆盖正常+边界+异常路径",
+          "files_owned": ["services/risk-engine/**"],
+          "depends_on": ["D2-A1"]
+        },
+        {
+          "id": "D2-C2",
+          "agent": "c",
+          "type": "half_day_dep",
+          "phase": "afternoon",
+          "title": "Metrics Engine — Kafka 消费写入 Redis",
+          "prompt": "你是 Agent-C（Risk Engine）。请执行 D2 下午任务。\n\nAgent-B 已完成 Ingestor，Kafka 中有数据。\n\n实现 services/risk-engine/metrics/engine.go:\n1. 消费 Kafka exchange.trades → 更新 Redis trade 相关指标\n2. 消费 Kafka exchange.positions → 更新 Redis position:{account}:{symbol}\n3. 消费 Kafka exchange.balances → 更新 Redis balance:{account}:{asset}\n4. 更新 freshness:{account}:{dim} 时间戳\n5. 支持多个 consumer 并行消费不同 topic\n\n中文注释 + 错误显式处理 + 单元测试。",
+          "acceptance": "Redis HGETALL position:xxx 和 balance:xxx 返回数据",
+          "files_owned": ["services/risk-engine/metrics/**"],
+          "depends_on": ["D2-B1"]
+        }
+      ],
+      "acceptance_gate": "Kafka 有 trade/position 数据 + Redis 有实时指标 + P-001/S-013 单测通过",
+      "merge_sequence": ["D2-A1", "D2-B1", "D2-C1", "D2-C2"]
+    },
+    "D3": {
+      "title": "引擎主循环 + 通知 + 端到端联调",
+      "goal": "完整闭环：断网 → S-013 告警 → Telegram 通知",
+      "tasks": [
+        {
+          "id": "D3-C1",
+          "agent": "c",
+          "type": "blocker",
+          "phase": "morning",
+          "title": "Alert Engine 主循环",
+          "prompt": "你是 Agent-C（Risk Engine）。请执行 D3 上午任务。\n\n实现 services/risk-engine/alert/engine.go — Alert Engine 主循环：\n1. 定时（configurable interval）遍历所有 active 账户\n2. 对每个账户执行所有注册的 Rule\n3. 收集 RiskEvent 结果\n4. 写入 MySQL risk_events 表\n5. 发布到 Kafka risk_risk_events topic\n6. 日志记录每轮检测结果\n\n同时实现 services/risk-engine/main.go 服务入口：\n- 加载配置\n- 初始化 Store\n- 启动 Metrics Engine（消费 Kafka）\n- 启动 Alert Engine（定时检测）\n- Graceful shutdown\n\n中文注释 + 错误显式处理 + 单元测试。",
+          "acceptance": "Risk Engine 独立运行，检测到异常时写入 risk_events 表和 Kafka",
+          "files_owned": ["services/risk-engine/**"],
+          "depends_on": ["D2-C1", "D2-C2"]
+        },
+        {
+          "id": "D3-A1",
+          "agent": "a",
+          "type": "half_day_dep",
+          "phase": "afternoon",
+          "title": "Telegram Notifier 服务",
+          "prompt": "你是 Agent-A（Backend Core）。请执行 D3 下午任务。\n\n实现 services/telegram-notifier/main.go：\n1. 消费 Kafka risk_risk_events topic\n2. 解析 RiskEvent，按级别格式化消息：\n   - P0: 🔴 [紧急] 前缀 + 详细信息\n   - P1: 🟠 [警告] 前缀 + 详细信息\n   - P2: 🟡 [注意] 前缀\n   - P3: ⚪ [信息] 前缀\n3. 调用 Telegram Bot API 发送消息\n4. 记录通知状态到 MySQL notification_logs\n5. Graceful shutdown\n\n注意：Telegram bot_token 可能为空（开发阶段），此时仅打印日志不发送。\n\n中文注释 + 错误显式处理 + 单元测试。",
+          "acceptance": "Telegram 收到格式化告警消息（或 bot_token 为空时日志输出）",
+          "files_owned": ["services/telegram-notifier/**"],
+          "depends_on": ["D3-C1"]
+        },
+        {
+          "id": "D3-B1",
+          "agent": "b",
+          "type": "parallel",
+          "phase": "all_day",
+          "title": "Ingestor 健壮性加固",
+          "prompt": "你是 Agent-B（Exchange）。请执行 D3 全天任务。\n\n加固 Exchange Ingestor 的健壮性：\n1. WS 断线自动重连：指数退避（1s, 2s, 4s, 8s, max 30s）+ 重连计数日志\n2. listenKey 自动续期：每 30 分钟 PUT /fapi/v1/listenKey\n3. listenKey 过期处理：收到 listenKeyExpired 事件时立即重新获取\n4. Graceful shutdown：收到 SIGTERM/SIGINT 后关闭所有 WS + 等待 in-flight 消息发送完毕\n5. Goroutine 泄漏检查：shutdown 后确认所有 goroutine 退出\n\n编写健壮性测试：\n- 模拟 WS 断线 → 验证自动重连\n- 模拟 listenKey 过期 → 验证重新获取\n- 压力测试：连续重连 10 次，全部恢复\n\n中文注释 + 错误显式处理。",
+          "acceptance": "手动杀 WS → 自动重连成功 + S-013 触发告警",
+          "files_owned": ["pkg/exchange/**", "services/exchange-ingestor/**"],
+          "depends_on": []
+        },
+        {
+          "id": "D3-E1",
+          "agent": "e",
+          "type": "parallel",
+          "phase": "afternoon",
+          "title": "端到端测试脚本 + 稳定性测试",
+          "prompt": "你是 Agent-E（Infra/DevOps）。请执行 D3 下午任务。\n\n编写端到端测试：\n1. tests/e2e/poc_test.sh — POC 验收测试脚本：\n   - 启动全部服务（Ingestor + Risk Engine + Telegram Notifier）\n   - 等待数据流入（30s）\n   - 验证 Kafka topics 有数据\n   - 验证 Redis 有实时指标\n   - 验证 MySQL risk_events 有记录（或无记录则打印当前状态）\n   - 生成测试报告到 tests/reports/\n\n2. tests/e2e/stability_test.sh — 稳定性测试：\n   - 连续运行 1 小时\n   - 定期检查：goroutine 数量、内存使用、Kafka lag\n   - 结束后生成稳定性报告\n\n3. 测试报告格式（JSON + Markdown）：\n   - 测试时间、环境信息\n   - 各项检查结果（PASS/FAIL）\n   - 性能指标\n\n中文注释。脚本要有良好的错误提示。",
+          "acceptance": "端到端测试脚本可运行，生成报告",
+          "files_owned": ["tests/**", "docs/testing-report.md"],
+          "depends_on": ["D3-C1", "D3-A1"]
+        }
+      ],
+      "acceptance_gate": "启动全服务 → 断网触发 S-013 → Telegram 30s 内收到告警 + 连续运行 1h 无 crash",
+      "merge_sequence": ["D3-C1", "D3-A1", "D3-B1", "D3-E1"],
+      "release": {
+        "tag": "v0.1.0-poc",
+        "checklist": [
+          "启动全部服务：Ingestor + Risk Engine + Telegram Notifier",
+          "手动断开 WS → S-013 触发 → Telegram 30s 内收到告警",
+          "手动开启提币权限 → P-001 触发 → Telegram 收到告警",
+          "连续运行 1 小时：无 crash、无 goroutine 泄漏、内存稳定"
+        ]
+      }
+    }
+  }
+}

@@ -141,6 +141,66 @@ health: ## 检查所有中间件的连通性
 	@echo "======================"
 
 # ---------------------------------------------------------------
+# Orchestrator（多 Agent 调度）
+# ---------------------------------------------------------------
+orch-init: ## 初始化 Agent worktree（默认 A+B）
+	@./orchestrator/orchestrator.sh init $(AGENTS)
+
+orch-plan: ## 查看某天计划（用法: make orch-plan DAY=D1）
+	@./orchestrator/orchestrator.sh plan $(DAY)
+
+orch-run: ## 执行某天全部任务（用法: make orch-run DAY=D1）
+	@./orchestrator/orchestrator.sh run $(DAY)
+
+orch-run-task: ## 执行单个任务（用法: make orch-run-task TASK=D1-A1）
+	@./orchestrator/orchestrator.sh run-task $(TASK)
+
+orch-status: ## 查看所有 Agent 工作状态
+	@./orchestrator/orchestrator.sh status
+
+orch-merge: ## 合并某个 Agent 到 main（用法: make orch-merge AGENT=a）
+	@./orchestrator/orchestrator.sh merge $(AGENT)
+
+orch-sync: ## 同步 main 到所有 Agent worktree
+	@./orchestrator/orchestrator.sh sync
+
+orch-merge-all: ## 每日收工：合并所有 Agent（用法: make orch-merge-all DAY=D1）
+	@./orchestrator/orchestrator.sh merge-all $(DAY)
+
+orch-gate: ## 执行验收检查（用法: make orch-gate DAY=D1）
+	@./orchestrator/orchestrator.sh gate $(DAY)
+
+# ---------------------------------------------------------------
+# 测试报告
+# ---------------------------------------------------------------
+test-report-unit: ## 运行单元测试并生成报告
+	@./orchestrator/test-report.sh unit
+
+test-report-integration: ## 运行集成测试并生成报告
+	@./orchestrator/test-report.sh integration
+
+test-report-benchmark: ## 运行压力测试并生成报告
+	@./orchestrator/test-report.sh benchmark
+
+test-report-all: ## 运行全部测试并生成报告
+	@./orchestrator/test-report.sh all
+
+# ---------------------------------------------------------------
+# CI 辅助
+# ---------------------------------------------------------------
+push-all: ## 推送所有分支到 GitHub
+	@./orchestrator/ci-helper.sh push-all
+
+gen-docs: ## 从代码生成文档
+	@./orchestrator/ci-helper.sh gen-docs
+
+changelog: ## 生成 CHANGELOG
+	@./orchestrator/ci-helper.sh changelog
+
+pre-commit: ## 提交前检查（编译+测试+lint+格式化）
+	@./orchestrator/ci-helper.sh pre-commit
+
+# ---------------------------------------------------------------
 # 清理
 # ---------------------------------------------------------------
 clean: ## 清理编译产物
