@@ -1,0 +1,14 @@
+继续 D1 任务。完成 pkg/mq/ 的 Kafka producer 和 consumer 封装，以及 cmd/healthcheck/main.go 健康检查工具。
+
+健康检查需要验证：MySQL 连接 + 表存在、Redis 连接 + PING、Kafka broker 连通、ClickHouse 连接（可选）。
+
+加中文注释，写单元测试。
+
+---
+完成后请执行以下检查：
+1. go build ./... 确认编译通过
+2. go test ./... -v 确认测试通过
+3. 用 git add 和 git commit 提交你的改动，commit message 格式: feat|fix|test|docs(模块): 中文描述
+4. 如果有新模块，确认已写对应的 _test.go 单元测试
+
+验收标准: go run cmd/healthcheck/main.go 连接 MySQL/Redis/Kafka 成功

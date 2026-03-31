@@ -594,7 +594,29 @@ _execute_task() {
     cd "$wt_dir"
 
     # 使用 claude -p 非交互模式执行任务
-    if claude -p "$full_prompt" 2>&1 | tee "$log_file"; then
+    # --dangerously-skip-permissions: Agent 自动化开发需要跳过逐次权限确认
+    local prompt_file="${LOG_DIR}/.prompt_${task_id}.txt"
+    printf '%s\n' "$full_prompt" > "$prompt_file"
+
+    log_info "Prompt 已写入: ${prompt_file}"
+    log_info "开始执行 claude CLI..."
+
+    # 先输出到日志文件，再打印到终端（避免 tee 管道吞掉输出）
+    local exit_code=0
+    claude --dangerously-skip-permissions -p "$(cat "$prompt_file")" > "$log_file" 2>&1 || exit_code=$?
+
+    # 打印日志到终端
+    if [ -s "$log_file" ]; then
+        cat "$log_file"
+    else
+        log_warn "日志为空，尝试 stdin 管道方式..."
+        claude --dangerously-skip-permissions -p < "$prompt_file" > "$log_file" 2>&1 || exit_code=$?
+        [ -s "$log_file" ] && cat "$log_file"
+    fi
+
+    rm -f "$prompt_file"
+
+    if [ "$exit_code" -eq 0 ] && [ -s "$log_file" ]; then
         log_ok "任务 ${task_id} 执行完成"
         update_state "$task_id" "done"
 
@@ -610,6 +632,7 @@ _execute_task() {
             log_warn "推送到远程失败（可能没有配置 remote），本地 commit 已保存"
         }
     else
+        rm -f "$prompt_file"
         log_error "任务 ${task_id} 执行失败"
         update_state "$task_id" "failed"
         return 1

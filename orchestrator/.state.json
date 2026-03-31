@@ -1,1 +1,14 @@
-{"tasks":{}, "current_day": "D1", "started_at": "2026-03-31T18:13:57+08:00"}
+{
+  "tasks": {
+    "D1-A1": {
+      "status": "done",
+      "updated": "2026-03-31 18:15:38"
+    },
+    "D1-A2": {
+      "status": "done",
+      "updated": "2026-03-31 18:42:46"
+    }
+  },
+  "current_day": "D1",
+  "started_at": "2026-03-31T18:13:57+08:00"
+}
