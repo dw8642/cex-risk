@@ -1,0 +1,72 @@
+[system]
+debug = true
+env = "local"
+http_port = "8080"
+http_proxy = "127.0.0.1:7897"
+
+[database]
+host = "127.0.0.1"
+port = "3306"
+user = "root"
+pass = "9Cn50al8W4F7dooaNIhv"
+name = "cex_risk"
+charset = "utf8mb4"
+prefix = ""
+max_idle_conn = 10
+max_open_conn = 100
+max_life_time = 600
+
+[clickhouse]
+host = "127.0.0.1"
+port = "9000"
+user = "default"
+pass = ""
+name = "cex_risk"
+
+[redis]
+host = "127.0.0.1"
+port = "6379"
+user = ""
+pass = ""
+db = 2
+pool_size = 10
+
+[kafka]
+brokers = ["127.0.0.1:9092"]
+
+# 风控系统 Kafka Topics
+[kafka.topics]
+trade_events = "risk_trade_events"
+position_snapshots = "risk_position_snapshots"
+balance_snapshots = "risk_balance_snapshots"
+account_updates = "risk_account_updates"
+risk_events = "risk_risk_events"
+permission_checks = "risk_permission_checks"
+
+[binance]
+api_key = ""
+secret_key = ""
+futures_ws = "wss://fstream.binance.com"
+futures_rest = "https://fapi.binance.com"
+use_testnet = true
+testnet_futures_ws = "wss://stream.binancefuture.com"
+testnet_futures_rest = "https://testnet.binancefuture.com"
+
+[telegram]
+bot_token = ""
+chat_ids = []
+app_id = 0
+app_hash = ""
+phone = ""
+session_name = "local"
+
+[twilio]
+account_sid = ""
+auth_token = ""
+from_number = ""
+
+[risk_engine]
+alert_check_interval = "10s"
+rest_reconcile_interval = "30s"
+permission_check_interval = "60s"
+metrics_window = "5m"
