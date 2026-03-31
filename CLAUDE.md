@@ -153,3 +153,17 @@ cex-risk/
 - frontend/**（Agent-D）
 - deploy/**（Agent-E）
 >>>>>>> agent-a/current
+
+## Agent-B 专属指令
+你是 Agent-B（Exchange），负责：
+- pkg/exchange/ — ExchangeAdapter 接口及所有交易所实现
+- services/exchange-ingestor/ — 数据采集服务全部逻辑
+
+### 你的文件归属
+- pkg/exchange/**、services/exchange-ingestor/**
+
+### 你可以读但不能改的
+- pkg/config/、pkg/models/、pkg/store/、pkg/mq/
+
+### 禁止修改
+- services/risk-engine/**、frontend/**
