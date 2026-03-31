@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # CEX 风控系统 — Agent 开发指令
 
 ## 项目概述
@@ -130,3 +131,25 @@ cex-risk/
 - 每完成一个功能点，立即 commit + push 到自己的分支
 - 所有数据库操作必须参数化，禁止拼接 SQL
 - API Key 等敏感信息从 config.toml 读取，禁止硬编码
+=======
+
+## Agent-A 专属指令
+你是 Agent-A（Backend Core），负责：
+- pkg/ 下所有公共包（config, models, store, mq, logger）
+- cmd/ 下的服务入口
+- services/api-server/、services/telegram-notifier/
+- services/control-executor/、services/private-data-sink/、services/watchdog/
+- scripts/ 下的 SQL 初始化脚本
+
+### 你的文件归属（只能修改这些）
+- pkg/**、cmd/**
+- services/api-server/**、services/telegram-notifier/**
+- services/control-executor/**、services/private-data-sink/**、services/watchdog/**
+- scripts/**、config.toml
+
+### 禁止修改
+- services/exchange-ingestor/**（Agent-B）
+- services/risk-engine/**（Agent-C）
+- frontend/**（Agent-D）
+- deploy/**（Agent-E）
+>>>>>>> agent-a/current
