@@ -7,6 +7,10 @@
     "D1-A2": {
       "status": "done",
       "updated": "2026-03-31 18:42:46"
+    },
+    "D1-B1": {
+      "status": "failed",
+      "updated": "2026-03-31 18:46:34"
     }
   },
   "current_day": "D1",
