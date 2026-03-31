@@ -82,6 +82,17 @@ ensure_dirs() {
     mkdir -p "$LOG_DIR" "$REPORTS_DIR"
 }
 
+# 自动提交 main 分支上的脏文件（避免合并冲突）
+auto_commit_main() {
+    cd "$PROJECT_ROOT"
+    if [ -n "$(git status --porcelain)" ]; then
+        log_info "main 分支有未提交的改动，自动提交..."
+        git add -A
+        git commit -m "chore: orchestrator 自动提交 main 脏文件 $(date '+%Y%m%d_%H%M%S')" 2>/dev/null || true
+        log_ok "main 脏文件已提交"
+    fi
+}
+
 # 获取 Agent 的 worktree 路径
 agent_dir() {
     local agent=$1
@@ -151,6 +162,9 @@ cmd_init() {
     fi
 
     cd "$PROJECT_ROOT"
+
+    # 先自动提交脏文件
+    auto_commit_main
 
     # 确保在 main 分支
     local current_branch
@@ -412,6 +426,9 @@ cmd_run() {
     check_deps
     ensure_dirs
 
+    # 先自动提交 main 上的脏文件，避免后续合并冲突
+    auto_commit_main
+
     log_step "开始执行 ${day} 任务..."
     echo ""
 
@@ -519,12 +536,30 @@ _execute_task() {
     # 同步 main 到 worktree
     log_info "同步 main 到 Agent-$(upper "$agent") worktree..."
     cd "$wt_dir"
+
+    # 先提交 worktree 里的脏文件
+    if [ -n "$(git status --porcelain)" ]; then
+        git add -A
+        git commit -m "chore: Agent-$(upper "$agent") 自动提交未保存改动" 2>/dev/null || true
+    fi
+
     git fetch origin 2>/dev/null || true
-    git rebase main 2>/dev/null || {
-        log_warn "rebase 有冲突，尝试 merge..."
+    if ! git rebase main 2>/dev/null; then
         git rebase --abort 2>/dev/null
-        git merge main --no-edit 2>/dev/null || true
-    }
+        log_warn "rebase 有冲突，尝试 merge..."
+        if ! git merge main --no-edit 2>/dev/null; then
+            # 自动解决冲突：优先保留 agent 自己的版本
+            local conflict_files
+            conflict_files=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
+            if [ -n "$conflict_files" ]; then
+                while IFS= read -r f; do
+                    [ -n "$f" ] && git checkout --ours "$f" 2>/dev/null && git add "$f" 2>/dev/null
+                done <<< "$conflict_files"
+                git commit --no-edit 2>/dev/null || true
+                log_ok "同步冲突已自动解决（保留 Agent 本地版本）"
+            fi
+        fi
+    fi
 
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════════${NC}"
@@ -611,16 +646,42 @@ _merge_agent() {
         return 0
     fi
 
+    # 先确保 main 干净
+    auto_commit_main
+
     # 合并
     if git merge "$branch" --no-ff -m "merge: Agent-$(upper "$agent") — ${msg}" 2>/dev/null; then
         log_ok "Agent-$(upper "$agent") 合并成功 (${diff_count} commits)"
     else
-        log_error "合并冲突！请手动解决："
-        log_info "  cd $PROJECT_ROOT"
-        log_info "  git status  # 查看冲突文件"
-        log_info "  # 手动编辑解决冲突"
-        log_info "  git add . && git commit"
-        return 1
+        log_warn "合并冲突，自动解决中（优先采用 Agent 的改动）..."
+
+        # 获取冲突文件列表
+        local conflict_files
+        conflict_files=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
+
+        if [ -n "$conflict_files" ]; then
+            # 对每个冲突文件，优先采用 agent 分支的版本
+            while IFS= read -r f; do
+                if [ -n "$f" ]; then
+                    git checkout --theirs "$f" 2>/dev/null && git add "$f" 2>/dev/null
+                    log_info "  冲突自动解决: $f （采用 Agent-$(upper "$agent") 版本）"
+                fi
+            done <<< "$conflict_files"
+
+            git commit --no-edit 2>/dev/null || {
+                # 如果还有问题，abort 并报错
+                git merge --abort 2>/dev/null
+                log_error "自动解决失败，请手动处理："
+                log_info "  cd $PROJECT_ROOT && git merge $branch"
+                return 1
+            }
+            log_ok "Agent-$(upper "$agent") 合并成功（自动解决了冲突）"
+        else
+            # 没有冲突文件但 merge 报错，可能是其他问题
+            git merge --abort 2>/dev/null
+            log_error "合并失败（非冲突原因），请手动检查"
+            return 1
+        fi
     fi
 }
 
@@ -629,6 +690,9 @@ _merge_agent() {
 # ---------------------------------------------------------------
 cmd_sync() {
     log_step "同步 main 到所有 Agent worktree..."
+
+    # 先确保 main 干净
+    auto_commit_main
 
     for agent in "${AGENTS[@]}"; do
         local wt_dir
@@ -639,14 +703,34 @@ cmd_sync() {
         fi
 
         cd "$wt_dir"
+
+        # 先提交 worktree 的脏文件
+        if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "chore: Agent-$(upper "$agent") sync 前自动提交" 2>/dev/null || true
+        fi
+
         if git rebase main 2>/dev/null; then
             log_ok "Agent-$(upper "$agent") 同步成功"
         else
             git rebase --abort 2>/dev/null
             log_warn "Agent-$(upper "$agent") rebase 冲突，尝试 merge..."
-            git merge main --no-edit 2>/dev/null || {
-                log_error "Agent-$(upper "$agent") 合并失败，需手动处理"
-            }
+            if ! git merge main --no-edit 2>/dev/null; then
+                # 自动解决：保留 agent 本地版本
+                local conflict_files
+                conflict_files=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
+                if [ -n "$conflict_files" ]; then
+                    while IFS= read -r f; do
+                        [ -n "$f" ] && git checkout --ours "$f" 2>/dev/null && git add "$f" 2>/dev/null
+                    done <<< "$conflict_files"
+                    git commit --no-edit 2>/dev/null || true
+                    log_ok "Agent-$(upper "$agent") 冲突已自动解决"
+                else
+                    log_error "Agent-$(upper "$agent") 合并失败，需手动处理"
+                fi
+            else
+                log_ok "Agent-$(upper "$agent") 同步成功"
+            fi
         fi
     done
 }
@@ -657,6 +741,9 @@ cmd_sync() {
 cmd_merge_all() {
     local day="${1:-}"
     log_step "每日收工合并 — ${day:-unknown day}..."
+
+    # 先确保 main 干净
+    auto_commit_main
 
     # 先让每个 Agent 提交
     for agent in "${AGENTS[@]}"; do
