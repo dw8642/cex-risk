@@ -393,6 +393,136 @@ func TestParseAPIRestrictions(t *testing.T) {
 	}
 }
 
+// TestCreateAdapter 测试通过 Registry 创建适配器
+func TestCreateAdapter(t *testing.T) {
+	adapter, err := Create("binance_futures", "key", "secret", WithAccountID("acc-001"))
+	if err != nil {
+		t.Fatalf("Create() error: %v", err)
+	}
+	if adapter.ExchangeID() != "binance" {
+		t.Errorf("ExchangeID() = %q, want binance", adapter.ExchangeID())
+	}
+	if adapter.MarketType() != "futures" {
+		t.Errorf("MarketType() = %q, want futures", adapter.MarketType())
+	}
+}
+
+// TestCreateUnsupportedExchange 测试创建不支持的交易所返回错误
+func TestCreateUnsupportedExchange(t *testing.T) {
+	_, err := Create("okx_futures", "key", "secret")
+	if err == nil {
+		t.Fatal("expected error for unsupported exchange")
+	}
+	unsupErr, ok := err.(*UnsupportedExchangeError)
+	if !ok {
+		t.Fatalf("expected *UnsupportedExchangeError, got %T", err)
+	}
+	if unsupErr.ExchangeID != "okx_futures" {
+		t.Errorf("ExchangeID = %q, want okx_futures", unsupErr.ExchangeID)
+	}
+	if unsupErr.Error() != "unsupported exchange: okx_futures" {
+		t.Errorf("Error() = %q", unsupErr.Error())
+	}
+}
+
+// TestApplyOptions 测试选项应用
+func TestApplyOptions(t *testing.T) {
+	opts := ApplyOptions([]Option{
+		WithWSEndpoint("wss://test"),
+		WithRESTEndpoint("https://test"),
+		WithHTTPProxy("127.0.0.1:1080"),
+		WithAccountID("acc-123"),
+		WithDebug(true),
+	})
+
+	if opts.WSEndpoint != "wss://test" {
+		t.Errorf("WSEndpoint = %q", opts.WSEndpoint)
+	}
+	if opts.RESTEndpoint != "https://test" {
+		t.Errorf("RESTEndpoint = %q", opts.RESTEndpoint)
+	}
+	if opts.HTTPProxy != "127.0.0.1:1080" {
+		t.Errorf("HTTPProxy = %q", opts.HTTPProxy)
+	}
+	if opts.AccountID != "acc-123" {
+		t.Errorf("AccountID = %q", opts.AccountID)
+	}
+	if !opts.Debug {
+		t.Error("Debug should be true")
+	}
+}
+
+// TestApplyOptionsEmpty 测试空选项返回零值
+func TestApplyOptionsEmpty(t *testing.T) {
+	opts := ApplyOptions(nil)
+	if opts.WSEndpoint != "" || opts.RESTEndpoint != "" || opts.HTTPProxy != "" {
+		t.Error("empty options should have zero values")
+	}
+}
+
+// TestHandleListenKeyExpired 测试 listenKey 过期事件触发重连
+func TestHandleListenKeyExpired(t *testing.T) {
+	adapter := &BinanceFuturesAdapter{
+		opts:       &AdapterOptions{AccountID: "acc-test"},
+		tradeCh:    make(chan models.TradeEvent, 10),
+		positionCh: make(chan models.PositionSnapshot, 10),
+		balanceCh:  make(chan models.BalanceSnapshot, 10),
+		accountCh:  make(chan models.AccountUpdate, 10),
+		stopCh:     make(chan struct{}),
+	}
+	adapter.logger, _ = newTestLogger()
+
+	// listenKeyExpired 事件不应 panic，应触发异步 reconnect
+	msg, _ := json.Marshal(map[string]interface{}{
+		"e": "listenKeyExpired",
+		"E": time.Now().UnixMilli(),
+	})
+	// 不 panic 即为通过
+	adapter.handleWSMessage(msg)
+	time.Sleep(50 * time.Millisecond) // 给 goroutine 启动时间
+}
+
+// TestChannelFullDrop 测试 channel 满时丢弃事件不阻塞
+func TestChannelFullDrop(t *testing.T) {
+	adapter := &BinanceFuturesAdapter{
+		opts:       &AdapterOptions{AccountID: "acc-test"},
+		tradeCh:    make(chan models.TradeEvent, 1), // 容量 1
+		positionCh: make(chan models.PositionSnapshot, 10),
+		balanceCh:  make(chan models.BalanceSnapshot, 10),
+		accountCh:  make(chan models.AccountUpdate, 10),
+		stopCh:     make(chan struct{}),
+	}
+	adapter.logger, _ = newTestLogger()
+
+	// 填满 channel
+	adapter.tradeCh <- models.TradeEvent{}
+
+	// 再发一条成交事件，应被丢弃而不阻塞
+	msg, _ := json.Marshal(map[string]interface{}{
+		"e": "ORDER_TRADE_UPDATE",
+		"E": time.Now().UnixMilli(),
+		"o": map[string]interface{}{
+			"s": "BTCUSDT", "S": "BUY", "x": "TRADE",
+			"i": 1, "t": 1, "L": "50000", "l": "0.01",
+			"Y": "500", "rp": "0", "n": "0.01",
+			"T": time.Now().UnixMilli(),
+		},
+	})
+
+	done := make(chan struct{})
+	go func() {
+		adapter.handleWSMessage(msg)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// 正常：不阻塞
+	case <-time.After(time.Second):
+		t.Fatal("handleWSMessage blocked on full channel")
+	}
+}
+
 // newTestLogger 创建测试用 logger（不输出到控制台）
 func newTestLogger() (*zap.Logger, error) {
 	cfg := zap.NewDevelopmentConfig()

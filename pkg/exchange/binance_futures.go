@@ -524,7 +524,7 @@ func (b *BinanceFuturesAdapter) keepAliveLoop() {
 }
 
 // reconnect 重连 WebSocket
-// 重连策略：最多尝试 10 次，每次间隔递增 (attempt * 2 秒)
+// 重连策略：指数退避，初始 1s，每次翻倍，上限 30s，最多尝试 10 次
 // 每次重连都会重新创建 listenKey 并建立新的 WS 连接
 func (b *BinanceFuturesAdapter) reconnect() {
 	b.wsMu.Lock()
@@ -534,14 +534,22 @@ func (b *BinanceFuturesAdapter) reconnect() {
 		b.wsConn.Close()
 	}
 
+	backoff := time.Second // 初始退避 1s
+	const maxBackoff = 30 * time.Second
+
 	for i := 0; i < 10; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 		key, err := b.createListenKey(ctx)
 		if err != nil {
 			cancel()
-			b.logger.Warn("reconnect: create listenKey failed", zap.Int("attempt", i+1), zap.Error(err))
-			time.Sleep(time.Duration(i+1) * 2 * time.Second)
+			b.logger.Warn("reconnect: create listenKey failed",
+				zap.Int("attempt", i+1), zap.Duration("backoff", backoff), zap.Error(err))
+			time.Sleep(backoff)
+			backoff = backoff * 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
 			continue
 		}
 		b.listenKey = key
@@ -559,8 +567,13 @@ func (b *BinanceFuturesAdapter) reconnect() {
 		conn, _, err := dialer.DialContext(ctx, wsURL, nil)
 		cancel()
 		if err != nil {
-			b.logger.Warn("reconnect: ws dial failed", zap.Int("attempt", i+1), zap.Error(err))
-			time.Sleep(time.Duration(i+1) * 2 * time.Second)
+			b.logger.Warn("reconnect: ws dial failed",
+				zap.Int("attempt", i+1), zap.Duration("backoff", backoff), zap.Error(err))
+			time.Sleep(backoff)
+			backoff = backoff * 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
 			continue
 		}
 
