@@ -1,0 +1,10 @@
+D2 上午任务完成。
+
+**已实现内容：**
+
+- `services/risk-engine/alert/rules/rule.go` — 规则引擎基础框架
+  - **Rule 接口**：`Name()` / `Code()` / `Check(ctx, account, store)` 三个方法，供 Agent-C 实现具体规则
+  - **RuleRegistry**：线程安全的注册表，支持 `Register` / `Get` / `List` / `Codes` / `Len`，重复注册/nil/空编号均有校验
+  - **DefaultRegistry**：全局实例，规则模块可在 `init()` 中自动注册
+
+- `services/risk-engine/alert/rules/rule_test.go` — 11 个单元测试全部通过，覆盖正常注册、重复注册、nil 规则、空编号、Get 存在/不存在、List、Codes、Check 调用、DefaultRegistry 可用性
