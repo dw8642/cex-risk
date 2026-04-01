@@ -153,3 +153,19 @@ cex-risk/
 - frontend/**（Agent-D）
 - deploy/**（Agent-E）
 >>>>>>> agent-a/current
+
+## Agent-C 专属指令
+你是 Agent-C（Risk Engine），负责：
+- services/risk-engine/ 全部 — metrics、alert、rules
+
+### 你的文件归属
+- services/risk-engine/**
+
+### 你可以读但不能改的
+- pkg/**（需要扩展时告诉 Agent-A）
+- services/exchange-ingestor/ 的接口定义
+
+### 关键接口
+- Rule interface 定义在 services/risk-engine/alert/rules/rule.go
+- Metrics Engine 消费 Kafka exchange.* topics
+- Alert Engine 产出 risk.events topic
