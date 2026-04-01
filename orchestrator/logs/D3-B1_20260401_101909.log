@@ -1,0 +1,25 @@
+D3 全天任务已完成。以下是改动总结：
+
+## D3 Exchange Ingestor 健壮性加固
+
+### 修改文件
+| 文件 | 改动 |
+|------|------|
+| `pkg/exchange/binance_futures.go` | 核心健壮性加固 |
+| `pkg/exchange/binance_futures_test.go` | 更新已有测试适配新逻辑 |
+| `pkg/exchange/binance_futures_robustness_test.go` | **新增** 10 个健壮性测试 |
+| `services/exchange-ingestor/ingestor.go` | 中文注释 |
+| `services/exchange-ingestor/main.go` | Graceful shutdown + goroutine 泄漏检查 |
+
+### 加固内容
+
+1. **WS 断线自动重连** — 指数退避 1s→2s→4s→...→30s，`reconnectMu` 防并发重连，`reconnectCount` 原子计数日志
+2. **listenKey 续期** — `keepAliveLoop` 每 30min PUT 续期，加 10s 超时上下文，失败触发完整重连
+3. **listenKey 过期** — 收到 `listenKeyExpired` 事件异步触发 reconnect，重新创建 listenKey
+4. **Graceful shutdown** — `Close()` 幂等安全（`atomic.Bool`），发送 WS Close 帧，10s 超时等待 goroutine；主服务 30s 总超时保护
+5. **Goroutine 泄漏检查** — shutdown 前后记录 goroutine 数，残留过多时打印告警
+
+### 测试结果
+- **28 个 exchange 测试** 全部通过（含 10 个新增健壮性测试）
+- **16 个 ingestor 测试** 全部通过
+- 压力测试：连续断开 WS 10 次，全部自动重连成功
