@@ -461,27 +461,41 @@ func TestApplyOptionsEmpty(t *testing.T) {
 	}
 }
 
-// TestHandleListenKeyExpired 测试 listenKey 过期事件触发重连
+// TestHandleListenKeyExpired 测试 listenKey 过期事件触发异步重连
 func TestHandleListenKeyExpired(t *testing.T) {
 	adapter := &BinanceFuturesAdapter{
-		opts:       &AdapterOptions{AccountID: "acc-test", WSEndpoint: "wss://fstream.binance.com", RESTEndpoint: "https://fapi.binance.com"},
+		opts:       &AdapterOptions{AccountID: "acc-test", WSEndpoint: "ws://127.0.0.1:1", RESTEndpoint: "http://127.0.0.1:1"},
 		tradeCh:    make(chan models.TradeEvent, 10),
 		positionCh: make(chan models.PositionSnapshot, 10),
 		balanceCh:  make(chan models.BalanceSnapshot, 10),
 		accountCh:  make(chan models.AccountUpdate, 10),
 		stopCh:     make(chan struct{}),
-		restClient: &http.Client{Timeout: 1 * time.Second},
+		restClient: &http.Client{Timeout: 100 * time.Millisecond},
 	}
 	adapter.logger, _ = newTestLogger()
 
-	// listenKeyExpired 事件不应 panic，应触发异步 reconnect
+	// listenKeyExpired 事件应异步触发 reconnect，handleWSMessage 立即返回
 	msg, _ := json.Marshal(map[string]interface{}{
 		"e": "listenKeyExpired",
 		"E": time.Now().UnixMilli(),
 	})
-	// 不 panic 即为通过（reconnect 会失败但不会 panic）
-	adapter.handleWSMessage(msg)
-	time.Sleep(50 * time.Millisecond) // 给 goroutine 启动时间
+
+	done := make(chan struct{})
+	go func() {
+		adapter.handleWSMessage(msg)
+		close(done)
+	}()
+
+	// handleWSMessage 应该快速返回（因为 reconnect 是异步的）
+	select {
+	case <-done:
+		// 正常
+	case <-time.After(time.Second):
+		t.Fatal("handleWSMessage 不应阻塞（reconnect 应异步执行）")
+	}
+
+	// 给异步 reconnect goroutine 一点启动时间
+	time.Sleep(100 * time.Millisecond)
 }
 
 // TestChannelFullDrop 测试 channel 满时丢弃事件不阻塞

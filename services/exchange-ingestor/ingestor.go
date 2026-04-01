@@ -101,11 +101,15 @@ func (i *Ingestor) Start(ctx context.Context) {
 }
 
 // Stop 停止采集
+// 关闭顺序：
+//   1. 发送 stop 信号（让消费 goroutine 不再接收新事件）
+//   2. 关闭适配器（关闭 WS + 关闭输出 channel）
+//   3. 等待所有消费 goroutine 退出（channel 关闭后自动退出 for-range）
 func (i *Ingestor) Stop() {
 	close(i.stopCh)
 	i.adapter.Close()
 	i.wg.Wait()
-	i.logger.Info("ingestor stopped")
+	i.logger.Info("ingestor 已停止")
 }
 
 // consumeTrades 消费成交事件，写入 Kafka
