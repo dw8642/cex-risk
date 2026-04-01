@@ -38,6 +38,11 @@ func NewRedis(cfg *config.RedisConfig, logger *zap.Logger) (*Redis, error) {
 	return &Redis{client: client, logger: logger}, nil
 }
 
+// NewRedisFromClient 从已有的 redis.Client 创建 Redis 实例（用于测试）
+func NewRedisFromClient(client *redis.Client) *Redis {
+	return &Redis{client: client, logger: zap.NewNop()}
+}
+
 // Client 返回底层 redis.Client
 func (r *Redis) Client() *redis.Client {
 	return r.client
