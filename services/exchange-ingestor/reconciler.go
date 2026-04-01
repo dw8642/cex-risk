@@ -27,11 +27,23 @@ import (
 const permTTL = 5 * time.Minute // 权限数据 Redis TTL，略大于 permission_check_interval 防止间隙
 const dataTTL = 2 * time.Minute // 仓位/余额数据 Redis TTL，略大于 rest_reconcile_interval
 
+// ReconcilerRedis 对账器所需的 Redis 操作接口，便于测试 mock
+type ReconcilerRedis interface {
+	SetPosition(ctx context.Context, accountID, symbol string, fields map[string]interface{}, ttl time.Duration) error
+	SetBalance(ctx context.Context, accountID, asset string, fields map[string]interface{}, ttl time.Duration) error
+	SetLastActivity(ctx context.Context, accountID string, t time.Time) error
+	SetPermission(ctx context.Context, accountID string, field string, value string, ttl time.Duration) error
+	SetPermissionIPList(ctx context.Context, accountID string, ips []string, ttl time.Duration) error
+}
+
+// 编译期检查 *store.Redis 实现 ReconcilerRedis 接口
+var _ ReconcilerRedis = (*store.Redis)(nil)
+
 // Reconciler 定时 REST 对账 + 权限检查
 type Reconciler struct {
 	adapter   exchange.Adapter
-	producer  *mq.Producer
-	redis     *store.Redis
+	producer  Publisher
+	redis     ReconcilerRedis
 	cfg       *config.Config
 	logger    *zap.Logger
 	accountID string
@@ -42,6 +54,11 @@ type Reconciler struct {
 
 // NewReconciler 创建对账器
 func NewReconciler(adapter exchange.Adapter, producer *mq.Producer, redis *store.Redis, cfg *config.Config, logger *zap.Logger, accountID string) *Reconciler {
+	return newReconciler(adapter, producer, redis, cfg, logger, accountID)
+}
+
+// newReconciler 内部构造器，接受接口类型（用于测试 mock）
+func newReconciler(adapter exchange.Adapter, producer Publisher, redis ReconcilerRedis, cfg *config.Config, logger *zap.Logger, accountID string) *Reconciler {
 	return &Reconciler{
 		adapter:   adapter,
 		producer:  producer,
