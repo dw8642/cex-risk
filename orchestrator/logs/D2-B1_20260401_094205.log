@@ -1,0 +1,27 @@
+D2 上午任务完成。总结：
+
+## 已完成内容
+
+### BinanceFuturesAdapter（已在之前实现，本次验证确认完整）
+- **SubscribeTrades**: 解析 `ORDER_TRADE_UPDATE` 中 `ExecutionType=TRADE` → 构造 `TradeEvent` → tradeCh
+- **SubscribePositions**: 解析 `ACCOUNT_UPDATE.P[]` → 构造 `PositionSnapshot` → positionCh
+- **SubscribeBalances**: 解析 `ACCOUNT_UPDATE.B[]` → 构造 `BalanceSnapshot` → balanceCh
+- **SubscribeAccountUpdates**: listenKey userData stream 统一分发 → accountCh
+- WS 自动重连（指数退避 1s→30s, 10 次）+ listenKey 30 分钟续期
+- REST: GetPositions / GetBalances / GetAPIKeyPermissions
+
+### Exchange Ingestor 主循环（已在之前实现，本次验证确认完整）
+- `main.go`: MySQL 加载 active 账户 → 为每个账户创建 Adapter + Ingestor + Reconciler → Graceful shutdown
+- `ingestor.go`: 4 个消费 goroutine，WS 事件 → JSON 序列化 → Kafka topic
+- `reconciler.go`: 定时 REST 对账 + 权限检查 → Kafka + Redis
+
+### 本次新增
+1. **接口抽象**（`Publisher` + `ReconcilerRedis`）— 解耦外部依赖，支持 mock 测试
+2. **17 个单元测试**覆盖：
+   - Ingestor: 成交/仓位/余额/账户更新消费、批量事件、发布失败恢复、channel 关闭、优雅关闭、混合事件
+   - Reconciler: 仓位余额对账、权限检查、REST 错误处理、空数据、无 IP 白名单、多仓位、定时循环启停
+
+### 验证
+- `go build ./...` 编译通过
+- `go test ./... -v` 全部 49 个测试通过
+- 已 commit + push 到 `agent-b/current`
