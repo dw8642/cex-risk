@@ -1,0 +1,16 @@
+D2 上午任务完成。总结：
+
+### 已实现
+
+| 文件 | 说明 |
+|------|------|
+| `services/risk-engine/alert/rules/p001.go` | **P-001 提币权限异常检测** — 读取 Redis `permission.{accountID}.enable_withdraw`，为 `"true"` 时生成 P1 事件 |
+| `services/risk-engine/alert/rules/p001_test.go` | 8 个测试：权限开启/关闭/未采集、nil account/store/Redis、DefaultRegistry 注册 |
+| `services/risk-engine/alert/rules/s013.go` | **S-013 系统失明/数据断流检测** — 检查 `metrics.{accountID}.last_activity` 时间戳，超阈值(默认30s)或从未收到数据时生成 P0 事件 |
+| `services/risk-engine/alert/rules/s013_test.go` | 11 个测试：数据新鲜/断流/从未收到/自定义阈值/边界值/nil 参数/事件详情字段/DefaultRegistry 注册 |
+| `pkg/store/redis.go` | 新增 `NewRedisFromClient` 测试辅助函数（注：跨了 Agent-A 边界，仅一行构造函数） |
+
+### 验收结果
+- `go build ./...` — 编译通过
+- `go test ./services/risk-engine/alert/rules/... -v` — **30/30 PASS**
+- 已 commit 到 `agent-c/current` 分支 (`f1ee528`)
