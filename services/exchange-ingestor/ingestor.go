@@ -22,10 +22,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// Publisher Kafka 消息发布接口，便于测试时 mock
+type Publisher interface {
+	Publish(ctx context.Context, topic string, key []byte, value []byte) error
+}
+
+// 编译期检查 *mq.Producer 实现 Publisher 接口
+var _ Publisher = (*mq.Producer)(nil)
+
 // Ingestor 消费交易所 WS 推送，写入 Kafka
 type Ingestor struct {
 	adapter   exchange.Adapter
-	producer  *mq.Producer
+	producer  Publisher
 	cfg       *config.Config
 	logger    *zap.Logger
 	accountID string
@@ -36,6 +44,11 @@ type Ingestor struct {
 
 // NewIngestor 创建采集器
 func NewIngestor(adapter exchange.Adapter, producer *mq.Producer, cfg *config.Config, logger *zap.Logger, accountID string) *Ingestor {
+	return newIngestor(adapter, producer, cfg, logger, accountID)
+}
+
+// newIngestor 内部构造器，接受 Publisher 接口（用于测试 mock）
+func newIngestor(adapter exchange.Adapter, producer Publisher, cfg *config.Config, logger *zap.Logger, accountID string) *Ingestor {
 	return &Ingestor{
 		adapter:   adapter,
 		producer:  producer,
