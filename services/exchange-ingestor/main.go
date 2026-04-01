@@ -17,7 +17,9 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
+	"time"
 
 	"github.com/cex-risk/cex-risk/pkg/config"
 	"github.com/cex-risk/cex-risk/pkg/exchange"
@@ -128,16 +130,40 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-sigCh
-	log.Info("shutdown signal received", zap.String("signal", sig.String()))
 
-	// 优雅关闭
-	cancel()
-	for _, ing := range ingestors {
-		ing.Stop()
-	}
-	for _, rec := range reconcilers {
-		rec.Stop()
-	}
+	goroutinesBefore := runtime.NumGoroutine()
+	log.Info("收到退出信号，开始优雅关闭",
+		zap.String("signal", sig.String()),
+		zap.Int("当前goroutine数", goroutinesBefore))
 
-	log.Info("exchange-ingestor stopped")
+	// 优雅关闭：带总超时保护
+	shutdownDone := make(chan struct{})
+	go func() {
+		cancel()
+		for _, ing := range ingestors {
+			ing.Stop()
+		}
+		for _, rec := range reconcilers {
+			rec.Stop()
+		}
+		close(shutdownDone)
+	}()
+
+	const shutdownTimeout = 30 * time.Second
+	select {
+	case <-shutdownDone:
+		goroutinesAfter := runtime.NumGoroutine()
+		log.Info("exchange-ingestor 已正常关闭",
+			zap.Int("关闭前goroutine数", goroutinesBefore),
+			zap.Int("关闭后goroutine数", goroutinesAfter))
+		if goroutinesAfter > 5 {
+			log.Warn("关闭后仍有较多 goroutine 存活，可能存在泄漏",
+				zap.Int("goroutine数", goroutinesAfter))
+		}
+	case <-time.After(shutdownTimeout):
+		goroutinesAfter := runtime.NumGoroutine()
+		log.Error("优雅关闭超时，强制退出",
+			zap.Duration("超时时间", shutdownTimeout),
+			zap.Int("残留goroutine数", goroutinesAfter))
+	}
 }

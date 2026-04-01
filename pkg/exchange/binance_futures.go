@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cex-risk/cex-risk/pkg/models"
@@ -52,7 +53,7 @@ type BinanceFuturesAdapter struct {
 	opts      *AdapterOptions
 	logger    *zap.Logger
 
-	restClient *http.Client  // 带代理和超时的 HTTP 客户端
+	restClient *http.Client    // 带代理和超时的 HTTP 客户端
 	wsConn     *websocket.Conn // 当前活跃的 WS 连接
 	wsMu       sync.Mutex      // 保护 wsConn 的并发读写
 
@@ -65,6 +66,11 @@ type BinanceFuturesAdapter struct {
 
 	stopCh chan struct{}    // 关闭信号
 	wg     sync.WaitGroup  // 等待所有 goroutine 退出
+
+	// 健壮性相关字段
+	reconnectCount  atomic.Int64  // 累计重连次数
+	reconnectMu     sync.Mutex    // 防止并发重连
+	closed          atomic.Bool   // 标记是否已关闭，防止重复 Close
 }
 
 // NewBinanceFuturesAdapter 创建币安合约适配器
@@ -291,28 +297,62 @@ func (b *BinanceFuturesAdapter) GetAPIKeyPermissions(ctx context.Context) (*mode
 	}, nil
 }
 
-// Close 关闭连接
+// Close 关闭连接（幂等安全，可重复调用）
+// 关闭顺序：
+//   1. 标记 closed，防止重复关闭和重连
+//   2. 通知 stopCh，让 readLoop 和 keepAliveLoop 退出
+//   3. 关闭 WS 连接
+//   4. 等待所有 goroutine 退出（带超时保护，防止永久阻塞）
+//   5. 关闭输出 channel
 func (b *BinanceFuturesAdapter) Close() error {
+	// 幂等保护：只执行一次
+	if !b.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	b.logger.Info("开始关闭适配器",
+		zap.Int64("累计重连次数", b.reconnectCount.Load()))
+
 	close(b.stopCh)
 
 	b.wsMu.Lock()
 	if b.wsConn != nil {
+		// 发送 WS Close 帧，给对端优雅关闭的机会
+		b.wsConn.WriteMessage(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "shutdown"))
 		b.wsConn.Close()
+		b.wsConn = nil
 	}
 	b.wsMu.Unlock()
 
-	b.wg.Wait()
+	// 带超时等待所有 goroutine 退出，防止 goroutine 泄漏导致永久阻塞
+	done := make(chan struct{})
+	go func() {
+		b.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		b.logger.Info("所有 goroutine 已退出")
+	case <-time.After(10 * time.Second):
+		b.logger.Error("等待 goroutine 退出超时（10s），可能存在 goroutine 泄漏")
+	}
 
 	close(b.tradeCh)
 	close(b.positionCh)
 	close(b.balanceCh)
 	close(b.accountCh)
+
+	b.logger.Info("适配器已关闭")
 	return nil
 }
 
 // ==================== 内部方法 ====================
 
 // readLoop WebSocket 消息读取循环
+// 在读取失败时触发重连，若重连也失败则退出循环（等待外部重启）
 func (b *BinanceFuturesAdapter) readLoop() {
 	defer b.wg.Done()
 
@@ -327,6 +367,7 @@ func (b *BinanceFuturesAdapter) readLoop() {
 		conn := b.wsConn
 		b.wsMu.Unlock()
 		if conn == nil {
+			b.logger.Warn("readLoop: wsConn 为 nil，退出读取循环")
 			return
 		}
 
@@ -336,8 +377,13 @@ func (b *BinanceFuturesAdapter) readLoop() {
 			case <-b.stopCh:
 				return
 			default:
-				b.logger.Error("ws read error, reconnecting...", zap.Error(err))
-				b.reconnect()
+				b.logger.Error("ws 读取失败，尝试重连",
+					zap.Error(err),
+					zap.Int64("累计重连次数", b.reconnectCount.Load()))
+				if !b.reconnect() {
+					b.logger.Error("重连失败，readLoop 退出")
+					return
+				}
 				continue
 			}
 		}
@@ -363,7 +409,10 @@ func (b *BinanceFuturesAdapter) handleWSMessage(msg []byte) {
 	case "ACCOUNT_UPDATE":
 		b.handleAccountUpdate(msg, base.EventTime)
 	case "listenKeyExpired":
-		b.logger.Warn("listenKey expired, reconnecting...")
+		b.logger.Warn("listenKey 已过期，异步触发重连",
+			zap.Int64("累计重连次数", b.reconnectCount.Load()))
+		// 使用 goroutine 异步重连，避免阻塞 readLoop
+		// reconnectMu 保证不会和 readLoop 的重连并发执行
 		go b.reconnect()
 	default:
 		if b.opts.Debug {
@@ -501,7 +550,8 @@ func (b *BinanceFuturesAdapter) handleAccountUpdate(msg []byte, eventTime int64)
 	}
 }
 
-// keepAliveLoop 每 30 分钟续期 listenKey
+// keepAliveLoop 每 30 分钟续期 listenKey（PUT /fapi/v1/listenKey）
+// 如果续期失败则触发完整重连（创建新 listenKey + 新 WS 连接）
 func (b *BinanceFuturesAdapter) keepAliveLoop() {
 	defer b.wg.Done()
 	ticker := time.NewTicker(30 * time.Minute)
@@ -512,39 +562,69 @@ func (b *BinanceFuturesAdapter) keepAliveLoop() {
 		case <-b.stopCh:
 			return
 		case <-ticker.C:
-			if err := b.keepAliveListenKey(context.Background()); err != nil {
-				b.logger.Error("listenKey keepAlive failed", zap.Error(err))
-				// 失败则重新创建
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			err := b.keepAliveListenKey(ctx)
+			cancel()
+			if err != nil {
+				b.logger.Error("listenKey 续期失败，触发重连",
+					zap.Error(err),
+					zap.Int64("累计重连次数", b.reconnectCount.Load()))
 				b.reconnect()
 			} else {
-				b.logger.Debug("listenKey keepAlive ok")
+				b.logger.Debug("listenKey 续期成功",
+					zap.String("key", b.listenKey[:8]+"..."))
 			}
 		}
 	}
 }
 
 // reconnect 重连 WebSocket
-// 重连策略：指数退避，初始 1s，每次翻倍，上限 30s，最多尝试 10 次
+// 重连策略：指数退避（1s → 2s → 4s → 8s → ... → 30s），最多尝试 10 次
 // 每次重连都会重新创建 listenKey 并建立新的 WS 连接
-func (b *BinanceFuturesAdapter) reconnect() {
-	b.wsMu.Lock()
-	defer b.wsMu.Unlock()
+// 使用 reconnectMu 防止并发重连（readLoop 和 keepAliveLoop 可能同时触发）
+// 返回 true 表示重连成功，false 表示所有尝试均失败
+func (b *BinanceFuturesAdapter) reconnect() bool {
+	// 防止并发重连
+	b.reconnectMu.Lock()
+	defer b.reconnectMu.Unlock()
 
+	// 已关闭则不再重连
+	if b.closed.Load() {
+		return false
+	}
+
+	count := b.reconnectCount.Add(1)
+	b.logger.Info("开始 WS 重连", zap.Int64("第N次重连", count))
+
+	b.wsMu.Lock()
 	if b.wsConn != nil {
 		b.wsConn.Close()
+		b.wsConn = nil
 	}
+	b.wsMu.Unlock()
 
 	backoff := time.Second // 初始退避 1s
 	const maxBackoff = 30 * time.Second
 
 	for i := 0; i < 10; i++ {
+		// 检查是否在重连期间收到了关闭信号
+		select {
+		case <-b.stopCh:
+			b.logger.Info("重连中途收到关闭信号，放弃重连")
+			return false
+		default:
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 		key, err := b.createListenKey(ctx)
 		if err != nil {
 			cancel()
-			b.logger.Warn("reconnect: create listenKey failed",
-				zap.Int("attempt", i+1), zap.Duration("backoff", backoff), zap.Error(err))
+			b.logger.Warn("重连: 创建 listenKey 失败",
+				zap.Int("尝试次数", i+1),
+				zap.Int("最大尝试", 10),
+				zap.Duration("退避时间", backoff),
+				zap.Error(err))
 			time.Sleep(backoff)
 			backoff = backoff * 2
 			if backoff > maxBackoff {
@@ -552,7 +632,10 @@ func (b *BinanceFuturesAdapter) reconnect() {
 			}
 			continue
 		}
+
+		b.wsMu.Lock()
 		b.listenKey = key
+		b.wsMu.Unlock()
 
 		wsURL := fmt.Sprintf("%s/ws/%s", b.opts.WSEndpoint, b.listenKey)
 		dialer := websocket.DefaultDialer
@@ -567,8 +650,11 @@ func (b *BinanceFuturesAdapter) reconnect() {
 		conn, _, err := dialer.DialContext(ctx, wsURL, nil)
 		cancel()
 		if err != nil {
-			b.logger.Warn("reconnect: ws dial failed",
-				zap.Int("attempt", i+1), zap.Duration("backoff", backoff), zap.Error(err))
+			b.logger.Warn("重连: WS 拨号失败",
+				zap.Int("尝试次数", i+1),
+				zap.Int("最大尝试", 10),
+				zap.Duration("退避时间", backoff),
+				zap.Error(err))
 			time.Sleep(backoff)
 			backoff = backoff * 2
 			if backoff > maxBackoff {
@@ -577,11 +663,26 @@ func (b *BinanceFuturesAdapter) reconnect() {
 			continue
 		}
 
+		b.wsMu.Lock()
 		b.wsConn = conn
-		b.logger.Info("WebSocket reconnected")
-		return
+		b.wsMu.Unlock()
+
+		b.logger.Info("WS 重连成功",
+			zap.Int("本次尝试次数", i+1),
+			zap.Int64("累计重连次数", count),
+			zap.String("listenKey", key[:8]+"..."))
+		return true
 	}
-	b.logger.Error("reconnect failed after 10 attempts")
+
+	b.logger.Error("WS 重连失败，已耗尽所有尝试",
+		zap.Int("最大尝试次数", 10),
+		zap.Int64("累计重连次数", count))
+	return false
+}
+
+// ReconnectCount 返回累计重连次数（用于监控和测试）
+func (b *BinanceFuturesAdapter) ReconnectCount() int64 {
+	return b.reconnectCount.Load()
 }
 
 // ==================== REST 辅助方法 ====================
