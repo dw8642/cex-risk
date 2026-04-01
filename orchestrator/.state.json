@@ -1,10 +1,14 @@
 {
   "tasks": {
-    "D3-B1": {
-      "status": "done",
-      "updated": "2026-04-01 10:31:47"
-    }
+    "D1-A1": { "status": "done", "updated": "2026-03-31 18:15:38" },
+    "D1-A2": { "status": "done", "updated": "2026-03-31 18:42:46" },
+    "D1-B1": { "status": "done", "updated": "2026-03-31 19:01:40" },
+    "D2-A1": { "status": "done", "updated": "2026-04-01 09:24:23" },
+    "D2-B1": { "status": "done", "updated": "2026-04-01 09:49:25" },
+    "D2-C1": { "status": "done", "updated": "2026-04-01 09:29:27" },
+    "D2-C2": { "status": "done", "updated": "2026-04-01 09:55:03" },
+    "D3-B1": { "status": "done", "updated": "2026-04-01 10:31:47" }
   },
-  "current_day": "D1",
+  "current_day": "D3",
   "started_at": "2026-04-01T10:16:12+08:00"
 }

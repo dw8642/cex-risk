@@ -53,8 +53,8 @@ testnet_futures_ws = "wss://stream.binancefuture.com"
 testnet_futures_rest = "https://testnet.binancefuture.com"
 
 [telegram]
-bot_token = ""
-chat_ids = []
+bot_token = "7757977374:AAE4SewUFsNjEb3o9-j4rs7MaO_EHMimqZs"
+chat_ids = ["5182738582"]
 app_id = 0
 app_hash = ""
 phone = ""
