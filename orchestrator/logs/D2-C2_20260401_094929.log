@@ -1,0 +1,21 @@
+Done. Here's a summary:
+
+## 已完成: `services/risk-engine/metrics/engine.go`
+
+**功能实现:**
+
+| Kafka Topic | Redis 写入 | 说明 |
+|---|---|---|
+| `risk_trade_events` | `trade.volume.{acc}.{window}` (Sorted Set) + `trade.symbols.{acc}.{window}` (Set) | 滑动窗口成交计数 + 币对记录 |
+| `risk_position_snapshots` | `position.{acc}.{symbol}` (Hash) | HGETALL 返回完整仓位数据 |
+| `risk_balance_snapshots` | `balance.{acc}.{asset}` (Hash) | HGETALL 返回完整余额数据 |
+
+**附加更新:**
+- `metrics.{acc}.last_activity` — 每条消息都更新最后活跃时间
+- `freshness.{acc}.{dim}` — trade/position/balance 三个维度的新鲜度时间戳
+
+**架构:**
+- 3 个 Kafka Consumer 并行消费，通过 `ConsumerGroup.StartAll()` 启动
+- `NewEngine()` 参数校验，`Start(ctx)` 非阻塞启动，`Stop()` 优雅关闭
+
+**测试:** 10 个测试全部通过 — 覆盖正常路径、多笔累计、多资产、反序列化失败、参数校验、键不存在等场景。
