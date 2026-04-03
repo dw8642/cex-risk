@@ -1,12 +1,13 @@
 // rules.go — 6 条 P0 风控规则实现
 //
 // 规则清单（MVP P0）：
-//   P-001: 提币权限异常开启
-//   S-004: 风控系统失明/数据断流
-//   L-001: 维持保证金占比过高（含 PM uniMMR + accountStatus）
-//   E-001: 净 Delta 变化率异常
-//   E-005: 仓位变动速率异常
-//   E-008c: 资金费率结算周期变更
+//
+//	P-001: 提币权限异常开启
+//	S-004: 风控系统失明/数据断流
+//	L-001: 维持保证金占比过高（含 PM uniMMR + accountStatus）
+//	E-001: 净 Delta 变化率异常
+//	E-005: 仓位变动速率异常
+//	E-008c: 资金费率结算周期变更
 //
 // 统一签名：func(data *AccountData, cfg *RulesConfig) []RiskAlert
 package sentinel
@@ -35,20 +36,20 @@ type e001EvalResult struct {
 }
 
 type l001EvalResult struct {
-	AccountType      string
-	SkipReason       string
-	Triggered        bool
-	TriggerLevel     string
-	TriggerBranch    string
-	MarginRatio      float64
-	MarginThreshold  float64
-	UniMMR           float64
-	UniMMRThreshold  float64
-	AccountStatus    string
-	TotalEquity      float64
-	MaintMargin      float64
-	MarginBalance    float64
-	TriggerReason    string
+	AccountType     string
+	SkipReason      string
+	Triggered       bool
+	TriggerLevel    string
+	TriggerBranch   string
+	MarginRatio     float64
+	MarginThreshold float64
+	UniMMR          float64
+	UniMMRThreshold float64
+	AccountStatus   string
+	TotalEquity     float64
+	MaintMargin     float64
+	MarginBalance   float64
+	TriggerReason   string
 }
 
 type p001EvalResult struct {
@@ -65,66 +66,66 @@ type s004EvalResult struct {
 }
 
 type e005EvalResult struct {
-	SkipReason        string
-	TotalChange       float64
-	Threshold         float64
-	CurrentCount      int
-	PrevCount         int
-	Triggered         bool
-	ChangedLegs       int
-	ClosedLegs        int
-	TriggerReason     string
+	SkipReason    string
+	TotalChange   float64
+	Threshold     float64
+	CurrentCount  int
+	PrevCount     int
+	Triggered     bool
+	ChangedLegs   int
+	ClosedLegs    int
+	TriggerReason string
 }
 
 type e008cEvalResult struct {
-	SkipReason      string
-	Triggered       bool
-	MismatchCount   int
-	ExpectedHours   float64
-	Distribution    string
-	Preview         string
+	SkipReason    string
+	Triggered     bool
+	MismatchCount int
+	ExpectedHours float64
+	Distribution  string
+	Preview       string
 }
 
 type l002EvalResult struct {
-	SkipReason         string
-	Triggered          bool
-	PositionCount      int
-	CheckedCount       int
-	TriggeredCount     int
-	MinDistancePct     float64
-	L2Threshold        float64
-	L3Threshold        float64
-	HighestLevel       string
-	ClosestSymbol      string
-	ClosestSide        string
-	ClosestMarkPrice   float64
-	ClosestLiqPrice    float64
+	SkipReason       string
+	Triggered        bool
+	PositionCount    int
+	CheckedCount     int
+	TriggeredCount   int
+	MinDistancePct   float64
+	L2Threshold      float64
+	L3Threshold      float64
+	HighestLevel     string
+	ClosestSymbol    string
+	ClosestSide      string
+	ClosestMarkPrice float64
+	ClosestLiqPrice  float64
 }
 
 type l003EvalResult struct {
-	SkipReason      string
-	Triggered       bool
-	PositionCount   int
-	CheckedCount    int
-	TriggeredCount  int
-	Threshold       int
-	MaxADLQuantile  int
-	TopSymbol       string
-	TopSide         string
+	SkipReason     string
+	Triggered      bool
+	PositionCount  int
+	CheckedCount   int
+	TriggeredCount int
+	Threshold      int
+	MaxADLQuantile int
+	TopSymbol      string
+	TopSide        string
 }
 
 type e008EvalResult struct {
-	SkipReason          string
-	Triggered           bool
-	PositionCount       int
-	FundingInfoCount    int
-	PayingCount         int
-	TriggeredCount      int
-	Threshold           float64
-	MaxAnnualizedRate   float64
-	MaxAnnualizedCost   float64
-	TopSymbol           string
-	TopSide             string
+	SkipReason        string
+	Triggered         bool
+	PositionCount     int
+	FundingInfoCount  int
+	PayingCount       int
+	TriggeredCount    int
+	Threshold         float64
+	MaxAnnualizedRate float64
+	MaxAnnualizedCost float64
+	TopSymbol         string
+	TopSide           string
 }
 
 type s014EvalResult struct {
@@ -141,23 +142,23 @@ type s014EvalResult struct {
 }
 
 type m001EvalResult struct {
-	SkipReason         string
-	Triggered          bool
-	WindowMinutes      int
-	Threshold          float64
-	SymbolCount        int
-	CheckedSymbols     int
-	TriggeredCount     int
-	TopSymbol          string
-	TopJumpPct         float64
-	TopDirection       string
-	PrevSamplePrice    float64
-	LatestSamplePrice  float64
-	PrevSampleTime     time.Time
-	LatestSampleTime   time.Time
-	CurrentPrice       float64
-	StartPrice         float64
-	Preview            string
+	SkipReason        string
+	Triggered         bool
+	WindowMinutes     int
+	Threshold         float64
+	SymbolCount       int
+	CheckedSymbols    int
+	TriggeredCount    int
+	TopSymbol         string
+	TopJumpPct        float64
+	TopDirection      string
+	PrevSamplePrice   float64
+	LatestSamplePrice float64
+	PrevSampleTime    time.Time
+	LatestSampleTime  time.Time
+	CurrentPrice      float64
+	StartPrice        float64
+	Preview           string
 }
 
 // AllRules 返回所有 MVP P0 规则
@@ -539,12 +540,12 @@ func evalE005(data *AccountData, cfg *RulesConfig) e005EvalResult {
 	}
 
 	result := e005EvalResult{
-		TotalChange:   totalChange,
-		Threshold:     cfg.PositionChangeThreshold,
-		CurrentCount:  len(data.Positions),
-		PrevCount:     len(data.PrevPositions),
-		ChangedLegs:   changedLegs,
-		ClosedLegs:    closedLegs,
+		TotalChange:  totalChange,
+		Threshold:    cfg.PositionChangeThreshold,
+		CurrentCount: len(data.Positions),
+		PrevCount:    len(data.PrevPositions),
+		ChangedLegs:  changedLegs,
+		ClosedLegs:   closedLegs,
 	}
 	if totalChange < cfg.PositionChangeThreshold {
 		result.SkipReason = "below_threshold"
@@ -585,10 +586,10 @@ func RuleE008c(data *AccountData, cfg *RulesConfig) []RiskAlert {
 			actualHours := float64(fi.FundingInterval) / 3600000.0
 			expectedHours := float64(cfg.ExpectedFundingInterval) / 3600000.0
 			mismatches = append(mismatches, fundingMismatch{
-				Symbol:          fi.Symbol,
-				ActualHours:     actualHours,
-				ExpectedHours:   expectedHours,
-				ActualInterval:  fi.FundingInterval,
+				Symbol:         fi.Symbol,
+				ActualHours:    actualHours,
+				ExpectedHours:  expectedHours,
+				ActualInterval: fi.FundingInterval,
 			})
 			lines = append(lines, fmt.Sprintf("- %s: %.0fh → 预期 %.0fh", fi.Symbol, actualHours, expectedHours))
 		}
@@ -743,9 +744,9 @@ func evalL002(data *AccountData, cfg *RulesConfig) l002EvalResult {
 		return l002EvalResult{SkipReason: "data_error"}
 	}
 	result := l002EvalResult{
-		PositionCount: len(data.Positions),
-		L2Threshold:   cfg.LiqDistanceL2Threshold,
-		L3Threshold:   cfg.LiqDistanceL3Threshold,
+		PositionCount:  len(data.Positions),
+		L2Threshold:    cfg.LiqDistanceL2Threshold,
+		L3Threshold:    cfg.LiqDistanceL3Threshold,
 		MinDistancePct: -1,
 	}
 	for _, p := range data.Positions {
@@ -903,12 +904,12 @@ func RuleE008(data *AccountData, cfg *RulesConfig) []RiskAlert {
 		annualizedCost := annualizedRate * p.NotionalValue
 
 		alerts = append(alerts, RiskAlert{
-			RuleCode:           "E-008",
-			RuleName:           "资金费率侵蚀",
-			Level:              "L2",
-			AccountID:          data.Account.AccountID,
-			AccountLabel:       data.Account.Label,
-			Title:              fmt.Sprintf("账户 %s %s 资金费年化 %.1f%%", data.Account.Label, p.Symbol, annualizedRate*100),
+			RuleCode:     "E-008",
+			RuleName:     "资金费率侵蚀",
+			Level:        "L2",
+			AccountID:    data.Account.AccountID,
+			AccountLabel: data.Account.Label,
+			Title:        fmt.Sprintf("账户 %s %s 资金费年化 %.1f%%", data.Account.Label, p.Symbol, annualizedRate*100),
 			Message: fmt.Sprintf("当前费率 %.4f%%｜结算周期 %.0fh｜名义 $%.0f｜年化成本 $%.0f",
 				fi.FundingRate*100, intervalHours, p.NotionalValue, annualizedCost),
 			CooldownTTLSeconds: cfg.FundingRateCooldown,
@@ -1049,7 +1050,9 @@ func evalS014(data *AccountData, cfg *RulesConfig) s014EvalResult {
 // RuleM001 检测市场价格短时跳变
 //
 // MVP 实现：基于 markPrice 滑动窗口，计算窗口内最早价格到当前价格的变化率
-//   price_jump_pct = abs(current_price - window_start_price) / window_start_price
+//
+//	price_jump_pct = abs(current_price - window_start_price) / window_start_price
+//
 // 判定：price_jump_pct >= threshold → L2 告警
 //
 // 监控范围：账户配置的 symbol + 所有持仓的 symbol
@@ -1111,12 +1114,12 @@ func RuleM001(data *AccountData, cfg *RulesConfig) []RiskAlert {
 		}
 
 		alerts = append(alerts, RiskAlert{
-			RuleCode:           "M-001",
-			RuleName:           "波动率突升",
-			Level:              "L2",
-			AccountID:          data.Account.AccountID,
-			AccountLabel:       data.Account.Label,
-			Title:              fmt.Sprintf("%s %dmin 价格跳变 %s%.1f%%", symbol, cfg.PriceJumpWindowMinutes, direction, jumpPct*100),
+			RuleCode:     "M-001",
+			RuleName:     "波动率突升",
+			Level:        "L2",
+			AccountID:    data.Account.AccountID,
+			AccountLabel: data.Account.Label,
+			Title:        fmt.Sprintf("%s %dmin 价格跳变 %s%.1f%%", symbol, cfg.PriceJumpWindowMinutes, direction, jumpPct*100),
 			Message: fmt.Sprintf("%.4f → %.4f｜阈值 %.1f%%",
 				startPrice, currentPrice, cfg.PriceJumpThreshold*100),
 			CooldownKey:        fmt.Sprintf("sentinel:cooldown:M-001:%s", symbol), // 按 symbol 去重，不按 account
@@ -1210,4 +1213,3 @@ func evalM001(data *AccountData, cfg *RulesConfig) m001EvalResult {
 	}
 	return result
 }
-

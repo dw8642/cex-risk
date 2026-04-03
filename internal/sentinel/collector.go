@@ -29,11 +29,11 @@ type Collector struct {
 	prevPositions map[string][]PositionInfo
 
 	// 低频数据缓存
-	lastPermCheck       map[string]time.Time // 上次权限检查时间
-	lastFundingCheck    time.Time            // 上次费率检查时间
-	fundingCache        []FundingInfo        // 费率缓存（所有账户共享）
-	lastPremiumCheck    time.Time            // 上次 premiumIndex 检查时间
-	premiumCache        map[string]FundingInfo // symbol → FundingInfo（含 fundingRate）
+	lastPermCheck    map[string]time.Time   // 上次权限检查时间
+	lastFundingCheck time.Time              // 上次费率检查时间
+	fundingCache     []FundingInfo          // 费率缓存（所有账户共享）
+	lastPremiumCheck time.Time              // 上次 premiumIndex 检查时间
+	premiumCache     map[string]FundingInfo // symbol → FundingInfo（含 fundingRate）
 
 	// 价格滑动窗口（M-001 用，所有账户共享）
 	priceHistory map[string][]PricePoint // symbol → 价格时间序列

@@ -28,7 +28,7 @@ type Engine struct {
 	store          *SentinelStore // MySQL 连接，nil 则不热重载
 	defaultRules   *RulesConfig   // TOML 原始默认值（作为 merge 基底）
 	reloadInterval time.Duration  // 热重载间隔，0 则不热重载
-	mu             sync.RWMutex  // 保护 rules 和 rulesCfg 的并发读写
+	mu             sync.RWMutex   // 保护 rules 和 rulesCfg 的并发读写
 
 	// 每条规则的上次评估时间（支持独立评估周期）
 	lastRuleEval map[string]time.Time

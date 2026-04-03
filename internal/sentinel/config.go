@@ -131,7 +131,7 @@ type RulesConfig struct {
 	PositionChangeThreshold float64 `toml:"position_change_threshold"` // 默认 50000 USD/min
 
 	// E-008c
-	ExpectedFundingInterval      int64 `toml:"expected_funding_interval"`        // 默认 28800000 ms (8h)
+	ExpectedFundingInterval      int64 `toml:"expected_funding_interval"`       // 默认 28800000 ms (8h)
 	FundingIntervalAlertCooldown int   `toml:"funding_interval_alert_cooldown"` // 默认 3600s (1h)
 
 	// S-004

@@ -46,7 +46,7 @@ type PositionInfo struct {
 // FundingInfo 资金费率结算信息
 type FundingInfo struct {
 	Symbol          string
-	FundingInterval int64   // 结算周期（毫秒），如 28800000 = 8h
+	FundingInterval int64 // 结算周期（毫秒），如 28800000 = 8h
 	FundingRate     float64
 	NextFundingTime int64   // Unix ms
 	MarkPrice       float64 // premiumIndex 返回的标记价格（M-001 用）
@@ -54,11 +54,11 @@ type FundingInfo struct {
 
 // APIHealthStats 交易所 API 健康指标（S-014 用）
 type APIHealthStats struct {
-	TotalRequests int           // 窗口内总请求数
-	ErrorCount    int           // 窗口内错误数
-	AvgLatencyMs  float64       // 窗口内平均延迟 (ms)
-	MaxLatencyMs  float64       // 窗口内最大延迟 (ms)
-	WindowStart   time.Time     // 统计窗口起始
+	TotalRequests int       // 窗口内总请求数
+	ErrorCount    int       // 窗口内错误数
+	AvgLatencyMs  float64   // 窗口内平均延迟 (ms)
+	MaxLatencyMs  float64   // 窗口内最大延迟 (ms)
+	WindowStart   time.Time // 统计窗口起始
 }
 
 // PricePoint 价格采样点（M-001 滑动窗口用）
@@ -70,12 +70,12 @@ type PricePoint struct {
 // AccountData 单个账户的完整采集快照
 // Collector 每 tick 产出一份，传给 Engine
 type AccountData struct {
-	Config        AccountConfig  // 来自配置
-	Account       AccountInfo    // 当前账户状态
-	Positions     []PositionInfo // 当前仓位
-	PrevPositions []PositionInfo // 上一轮仓位（E-001/E-005 用）
-	FundingInfos  []FundingInfo  // 资金费率信息
-	APIHealth     *APIHealthStats        // API 健康指标（S-014 用）
+	Config        AccountConfig           // 来自配置
+	Account       AccountInfo             // 当前账户状态
+	Positions     []PositionInfo          // 当前仓位
+	PrevPositions []PositionInfo          // 上一轮仓位（E-001/E-005 用）
+	FundingInfos  []FundingInfo           // 资金费率信息
+	APIHealth     *APIHealthStats         // API 健康指标（S-014 用）
 	PriceHistory  map[string][]PricePoint // symbol → 价格滑动窗口（M-001 用）
 	CollectTime   time.Time
 	Error         error // 采集失败时非 nil，Engine 跳过该账户并告警
@@ -84,17 +84,17 @@ type AccountData struct {
 // RiskAlert 风险告警事件
 // Rules 产出 → Engine 收集 → Alerter 发送
 type RiskAlert struct {
-	RuleCode     string                 // "P-001", "L-001", ...
-	RuleName     string                 // "提币权限异常", ...
-	Level        string                 // "L2"（MVP 统一）
-	AccountID    string
-	AccountLabel string
-	Title        string
-	Message      string                 // Telegram 消息正文
-	Details      map[string]interface{} // 结构化详情
-	CooldownKey        string           // 可选：自定义冷却去重 key（市场级规则用 symbol 维度）
-	CooldownTTLSeconds int              // 可选：单条告警覆盖默认冷却周期
-	Timestamp    time.Time
+	RuleCode           string // "P-001", "L-001", ...
+	RuleName           string // "提币权限异常", ...
+	Level              string // "L2"（MVP 统一）
+	AccountID          string
+	AccountLabel       string
+	Title              string
+	Message            string                 // Telegram 消息正文
+	Details            map[string]interface{} // 结构化详情
+	CooldownKey        string                 // 可选：自定义冷却去重 key（市场级规则用 symbol 维度）
+	CooldownTTLSeconds int                    // 可选：单条告警覆盖默认冷却周期
+	Timestamp          time.Time
 }
 
 // RuleFunc 规则函数签名
@@ -104,7 +104,7 @@ type RuleFunc func(data *AccountData, cfg *RulesConfig) []RiskAlert
 
 // RuleDefinition 规则定义
 type RuleDefinition struct {
-	Code string   // "P-001"
-	Name string   // "提币权限异常"
+	Code string // "P-001"
+	Name string // "提币权限异常"
 	Fn   RuleFunc
 }

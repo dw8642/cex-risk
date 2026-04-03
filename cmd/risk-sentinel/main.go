@@ -6,8 +6,9 @@
 //   - 基础设施配置（Redis/Telegram/Proxy）: 始终从 config.toml
 //
 // 用法:
-//   go run ./cmd/risk-sentinel --config config.toml
-//   go run ./cmd/risk-sentinel --config config.toml --dry-run
+//
+//	go run ./cmd/risk-sentinel --config config.toml
+//	go run ./cmd/risk-sentinel --config config.toml --dry-run
 package main
 
 import (
@@ -142,8 +143,8 @@ func main() {
 	// MySQL 初始化：加载账户和规则
 	// =========================================================
 	var store *sentinel.SentinelStore
-	accounts := cfg.Accounts   // TOML 回退
-	rulesCfg := &cfg.Rules     // TOML 回退
+	accounts := cfg.Accounts     // TOML 回退
+	rulesCfg := &cfg.Rules       // TOML 回退
 	rules := sentinel.AllRules() // 代码内全部规则
 	accountSource := "config.toml"
 

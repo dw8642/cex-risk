@@ -41,11 +41,11 @@ type BinanceRESTClient struct {
 	logger      *zap.Logger
 
 	// API 健康指标跟踪（S-014 用）
-	healthMu       sync.Mutex
-	requestLatencies []time.Duration // 滑动窗口内的请求延迟
-	requestErrors    int             // 窗口内错误计数
-	requestTotal     int             // 窗口内总请求数
-	healthWindowStart time.Time      // 窗口起始时间
+	healthMu          sync.Mutex
+	requestLatencies  []time.Duration // 滑动窗口内的请求延迟
+	requestErrors     int             // 窗口内错误计数
+	requestTotal      int             // 窗口内总请求数
+	healthWindowStart time.Time       // 窗口起始时间
 }
 
 // NewBinanceRESTClient 创建 REST 客户端
@@ -490,14 +490,14 @@ type binanceFuturesAccountResp struct {
 		MarginBalance    string `json:"marginBalance"`
 	} `json:"assets"`
 	Positions []struct {
-		Symbol       string `json:"symbol"`
-		PositionAmt  string `json:"positionAmt"`
-		EntryPrice   string `json:"entryPrice"`
-		MarkPrice    string `json:"markPrice"`
+		Symbol           string `json:"symbol"`
+		PositionAmt      string `json:"positionAmt"`
+		EntryPrice       string `json:"entryPrice"`
+		MarkPrice        string `json:"markPrice"`
 		UnrealizedProfit string `json:"unrealizedProfit"`
-		Leverage     string `json:"leverage"`
-		PositionSide string `json:"positionSide"`
-		Notional     string `json:"notional"`
+		Leverage         string `json:"leverage"`
+		PositionSide     string `json:"positionSide"`
+		Notional         string `json:"notional"`
 	} `json:"positions"`
 }
 
