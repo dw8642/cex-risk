@@ -1,0 +1,145 @@
+[system]
+debug = true
+env = "local"
+http_port = ""
+http_proxy = ""
+
+[database]
+host = "emojidao-dev-internal.mysql.singapore.rds.aliyuncs.com"
+port = "3306"
+user = "cex_risk_test"
+pass = "Z2f3e6Rd3856Eax"
+name = "cex_risk_test"
+charset = "utf8"
+prefix = ""
+max_idle_conn = 10
+max_open_conn = 100
+max_life_time = 600
+
+[clickhouse]
+host = "127.0.0.1"
+port = "9000"
+user = "default"
+pass = ""
+name = "cex_risk"
+
+[redis]
+host = "r-gs5bi772vtp2wbvsk7.redis.singapore.rds.aliyuncs.com"
+port = "6379"
+user = ""
+pass = "A1C37a7122dd0c2e1"
+db = 3
+pool_size = 10
+
+[kafka]
+brokers = ["127.0.0.1:9092"]
+
+# 风控系统 Kafka Topics
+[kafka.topics]
+trade_events = "risk_trade_events"
+position_snapshots = "risk_position_snapshots"
+balance_snapshots = "risk_balance_snapshots"
+account_updates = "risk_account_updates"
+risk_events = "risk_risk_events"
+permission_checks = "risk_permission_checks"
+
+[binance]
+futures_ws = "wss://fstream.binance.com"
+futures_rest = "https://fapi.binance.com"
+use_testnet = false
+testnet_futures_ws = "wss://stream.binancefuture.com"
+testnet_futures_rest = "https://testnet.binancefuture.com"
+
+[telegram]
+bot_token = "7757977374:AAE4SewUFsNjEb3o9-j4rs7MaO_EHMimqZs"
+chat_ids = ["5182738582"]
+app_id = 0
+app_hash = ""
+phone = ""
+session_name = "local"
+
+[twilio]
+account_sid = ""
+auth_token = ""
+from_number = ""
+
+[risk_engine]
+alert_check_interval = "10s"
+rest_reconcile_interval = "30s"
+permission_check_interval = "60s"
+metrics_window = "5m"
+
+# ============================================================
+# Sentinel 最小闭环配置
+# ============================================================
+
+[sentinel]
+poll_interval = "10s"
+symbol = "BTCUSDT"
+
+[[accounts]]
+id = "acc-01"
+exchange = "binance_futures"
+account_type = "portfolio_margin"
+api_key = ""
+secret_key = ""
+label = "主力1-PM"
+
+[[accounts]]
+id = "acc-02"
+exchange = "binance_futures"
+account_type = "regular"
+api_key = ""
+secret_key = ""
+label = "策略2"
+
+[[accounts]]
+id = "acc-03"
+exchange = "binance_futures"
+account_type = "portfolio_margin"
+api_key = ""
+secret_key = ""
+label = "做市3-PM"
+
+[[accounts]]
+id = "acc-04"
+exchange = "binance_futures"
+account_type = "regular"
+api_key = ""
+secret_key = ""
+label = "套利4"
+
+[[accounts]]
+id = "acc-05"
+exchange = "binance_futures"
+account_type = "portfolio_margin"
+api_key = ""
+secret_key = ""
+label = "备用5-PM"
+
+# ============================================================
+# 规则阈值 — 仅作为 MySQL 不可用时的兜底默认值
+# 正常运行时，阈值从 MySQL risk_rules.config JSON + sentinel_config 表读取
+# 修改阈值请直接改 MySQL，无需重启（热重载间隔见 sentinel_config.rule_reload_interval）
+# ============================================================
+[rules]
+margin_ratio_threshold = 0.5              # L-001: 普通合约 maintMargin/marginBalance
+pm_unimmr_threshold = 1.5                 # L-001: PM 统一账户 uniMMR（越小越危险）
+pm_status_alert = true                    # L-001: 监控 PM accountStatus 异常
+delta_change_rate_threshold = 0.3         # E-001: 净Delta变化率阈值（0.3 = 30%）
+delta_abs_threshold = 5000.0              # E-001: 净Delta绝对变化兜底（USD）
+position_change_threshold = 50000.0       # E-005: 仓位变动阈值（USD/周期）
+expected_funding_interval = 28800000      # E-008c: 预期资金费结算间隔（ms，28800000=8h）
+funding_interval_alert_cooldown = 3600    # E-008c: 同一币种告警冷却（秒）
+data_gap_threshold = 30                   # S-004: 数据断流阈值（秒）
+liq_distance_l2_threshold = 0.05          # L-002: 爆仓距离 L2 预警线（5%）
+liq_distance_l3_threshold = 0.02          # L-002: 爆仓距离 L3 紧急线（2%）
+adl_quantile_l2_threshold = 4             # L-003: ADL 等级 L2 阈值（1-5，4=高风险）
+funding_rate_annualized_l2 = 0.25         # E-008: 资金费率年化 L2 阈值（25%）
+funding_rate_cooldown = 1800              # E-008: 告警冷却（秒）
+api_latency_threshold_ms = 2000           # S-014: API 平均延迟阈值（ms）
+api_error_rate_threshold = 0.1            # S-014: API 错误率阈值（10%）
+price_jump_window_minutes = 60            # M-001: 价格跳变观察窗口（分钟）
+price_jump_threshold = 0.10               # M-001: 价格跳变阈值（10%）
+price_jump_cooldown = 600                 # M-001: 告警冷却（秒）
+cooldown_ttl = 300                        # 全局告警冷却（秒）
