@@ -1,4 +1,4 @@
-# CEX风控系统全面方案（V2.7 修订版）
+# CEX风控系统全面方案（V3.0 修订版）
 
 ## 0. 文档说明
 
@@ -25,7 +25,8 @@
 | V2.0 | 初版：风险框架、事件库、技术架构 |
 | V2.5 | 仲裁机制增加动作可逆性、REST 混合状态处理、E-015 预算消耗速率 |
 | V2.6 | 以五层方法论为主线重组全文结构；补充段落间逻辑关系；强化各层之间的数据流与依赖说明 |
-| **V2.7** | **监测层拆分为公共数据中心与私有数据中心（各含 WS 订阅 + REST 轮询）；系统架构层重构为 Data → Indicator → Rule 三级管道；引入指标引擎时间分层（T0~T4）与规则引擎评估分层（F0~F4）** |
+| V2.7 | 监测层拆分为公共数据中心与私有数据中心（各含 WS 订阅 + REST 轮询）；系统架构层重构为 Data → Indicator → Rule 三级管道；引入指标引擎时间分层（T0~T4）与规则引擎评估分层（F0~F4） |
+| **V3.0** | **新增健康治理子系统（5条规则S-014~S-018 + 10个指标 + 双分数模型 + Hard Cap + 运行态状态机）；新增风控控制台 Dashboard（8页面 + RBAC 4角色 + Scope绑定 + 双轨配置发布）；规则总数 77→82、指标总数 75→85、信号数 5→6；新增 §8.10 健康治理子系统工程设计、§8.11 风控控制台架构；更新 MVP 实施范围与分阶段交付计划** |
 
 
 ---
@@ -85,7 +86,7 @@ AI 已作为"开发效率放大器"介入代码、SQL、风控规则的生成，
 |------|------|---------|---------|---------|
 | **L0** | 识别 Identify | 风险来自哪里？作用在谁？如何表现？ | 风险维度/对象/状态定义、四层治理模型 | 最小闭环 |
 | **L1** | 监测 Monitor | 风险数据从哪来？数据可信吗？ | 实时数据流、新鲜度向量、Schema 校验 | MVP |
-| **L2** | 预警 Alert | 风险是否正在发生？先救哪个？ | RiskEvent、38 条规则、仲裁结果 | MVP → V1.0 |
+| **L2** | 预警 Alert | 风险是否正在发生？先救哪个？ | RiskEvent、82 条规则、仲裁结果 | MVP → V1.0 |
 | **L3** | 控制 Control | 如何应对？代价几何？ | 控制动作（R0~R3）、审计日志 | V1.0 |
 | **L4** | 演进 Evolve | 如何越来越好？ | 优化后的规则参数、自动校准的基线 | V2.0 |
 
@@ -906,8 +907,8 @@ B-013 单腿暴露持续
 │  │  └──────────┘ └──────────┘ └──────────┘ └────────┘ └───────┘ │         │
 │  │                                                                │         │
 │  │  输入：Kafka 消费 + Redis 读取                                 │         │
-│  │  输出：75 个指标值 → Redis（最新值）+ ClickHouse（时序归档）    │         │
-│  │  产出：metric (70) + signal (5)                                │         │
+│  │  输出：85 个指标值 → Redis（最新值）+ ClickHouse（时序归档）    │         │
+│  │  产出：metric (79) + signal (6)                                │         │
 │  └───────────────────────────────┬────────────────────────────────┘         │
 └──────────────────────────────────┼──────────────────────────────────────────┘
                                    │
@@ -926,7 +927,7 @@ B-013 单腿暴露持续
 │  │  输入：Redis（指标最新值）+ Kafka（指标变更事件）               │         │
 │  │        + MySQL（规则配置 + 治理模型）                          │         │
 │  │  输出：RiskEvent → Kafka alert topic                           │         │
-│  │  规则数：71 条（MVP 49 + Deferred 22）                         │         │
+│  │  规则数：82 条（MVP 72 + Deferred 10）                         │         │
 │  └───────────────────────────────┬────────────────────────────────┘         │
 └──────────────────────────────────┼──────────────────────────────────────────┘
                                    │
@@ -977,7 +978,7 @@ B-013 单腿暴露持续
 
 ### 8.3 指标层工程设计
 
-> 指标引擎是三级管道的核心计算层，负责将原始数据转化为 75 个标准化指标。
+> 指标引擎是三级管道的核心计算层，负责将原始数据转化为 85 个标准化指标（含 6 个 signal 类型）。
 
 #### 8.3.1 指标计算时间分层
 
@@ -1050,7 +1051,7 @@ B-013 单腿暴露持续
 
 ### 8.4 规则层工程设计
 
-> 规则引擎是三级管道的最终判定层，负责基于指标值执行 71 条规则（MVP 49 + Deferred 22），产出 RiskEvent。
+> 规则引擎是三级管道的最终判定层，负责基于指标值执行 82 条规则（MVP 72 + Deferred 10），产出 RiskEvent。
 
 #### 8.4.1 规则评估时间分层
 
@@ -1133,7 +1134,8 @@ B-013 单腿暴露持续
   - 规则引擎：进程存活、RiskEvent 产出（至少有心跳级别的 info 事件）
   - Kafka / Redis / MySQL / ClickHouse：组件存活和延迟
 - **职责**：防止风控系统"悄无声息地死亡"——即使整个主链路挂了，Watchdog 也能通过独立通道发出 P0 告警。
-- **对应方法论**：预警层 S-014，但独立于主链路之外。
+- **对应方法论**：预警层 S-009，但独立于主链路之外。
+- **与健康治理子系统的关系**：Watchdog 的存活检测结果是健康度评分（S-017）基础设施维度的输入之一。详见 §8.10。
 
 ### 8.8 部署拓扑（V2.7 新增）
 
@@ -1389,45 +1391,366 @@ Kafka topic 的 partition key 按 `entity_grain`（如 `binance:BTC-USDT:acct001
 
 **MVP 阶段**：所有服务单实例，但代码中必须预埋分片能力（Kafka partition key 设计、Redis key 命名空间、分片注册表接口）。这样在需要扩展时只需加容器 + 改配置，无需改代码。
 
+### 8.10 健康治理子系统工程设计（V3.0 新增）
+
+> 本小节对应独立设计文档 `system_health_score_design.md`（V3.0）。健康治理子系统解决的核心问题是：**风控系统自身是否健康？**——将系统的自我观测能力从离散的 S-Class 规则升级为一个统一的、可量化的、有状态机的治理子系统。
+
+#### 8.10.1 子系统定位
+
+健康治理子系统是叠加在三级管道之上的**内观层**（Introspection Layer），不改变现有管道架构，而是消费管道各阶段的指标来计算系统自身的健康状况。
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  三级管道（Data → Indicator → Rule）  — 现有架构不变     │
+└──────────────────────┬──────────────────────────────────┘
+                       │ 产出指标
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│  健康治理子系统                                          │
+│                                                          │
+│  输入: IND-S-001~018 + IND-S-004/007/008/009             │
+│  规则: S-014~S-018（5条健康治理规则）                     │
+│  计算: 五维加权 → internal_health_score                   │
+│  状态机: healthy ↔ internal_degraded ↔ critical           │
+│           ↔ external_degraded                             │
+│  输出: IND-S-017(score) + IND-S-017a(vector) + 健康报告  │
+│  旁路: S-018 Canary 探针（独立验证告警投递链路完整性）    │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### 8.10.2 新增规则与指标
+
+**5 条新增规则**（详见 `rule_library_v3.0_checklist.md`）：
+
+| 规则 | 名称 | 时间策略 | 核心职责 |
+|------|------|---------|---------|
+| S-014 | Kafka 消息积压 | F1, 5s | 监控 consumer lag，分高低优先级组 |
+| S-015 | 中间件+应用资源 | F2, 30s | Redis/MySQL/Service CPU/Memory |
+| S-016 | 指标静默检测 | F1, 10s | 发现停止更新的指标 |
+| S-017 | 健康度评分 | F2(实时)+F4(报告) | 五维加权评分+报告+状态切换 |
+| S-018 | Canary 告警探针 | 15min | 端到端验证 Telegram 投递 |
+
+**10 个新增指标**（详见 `indicator_library_v2.0.md`）：
+
+| 指标 | 名称 | 层级 | 类型 |
+|------|------|------|------|
+| IND-S-014 | kafka_consumer_lag | L0 | A |
+| IND-S-015 | redis_memory_usage_pct | L1 | A |
+| IND-S-015a | redis_ops_per_sec | L1 | A |
+| IND-S-015b | mysql_conn_pool_usage_pct | L1 | A |
+| IND-S-015c | service_cpu_usage_pct | L1 | A |
+| IND-S-015d | service_memory_usage_pct | L1 | A |
+| IND-S-016 | indicator_output_age_ms | L0 | A |
+| IND-S-017 | internal_health_score | L3 | D(signal) |
+| IND-S-017a | dimension_health_scores | L3 | D(vector) |
+| IND-S-018 | canary_alert_success | L2 | B |
+
+#### 8.10.3 双分数模型
+
+- **internal_health_score**（0~100 整数）：五维加权平均，代表系统内部各层的运行健康度。
+- **external_dependency_summary**（结构化文本）：API 频控消耗、交易对可交易性、合约参数漂移等，不纳入数值评分，以文本摘要呈现。
+
+**五维权重**（可配置）：
+
+| 维度 | 默认权重 | 包含指标 |
+|------|---------|---------|
+| 数据采集层 | 25% | IND-S-001, 001a, 001b, 002, 002a, 002b, 003, S-014(数据侧) |
+| 指标产出层 | 25% | IND-S-016(静默), 指标覆盖率, 计算延迟 |
+| 规则执行层 | 20% | 规则执行延迟, 评估覆盖率, 误触发率 |
+| 告警投递层 | 15% | Telegram 投递延迟, IND-S-018 Canary, 去重有效率 |
+| 基础设施层 | 15% | IND-S-014(Kafka lag), IND-S-015~015d |
+
+#### 8.10.4 Hard Cap 机制
+
+加权平均后，应用 `min(weighted_score, applicable_caps)`，防止"其余维度正常掩盖致命缺陷"：
+
+| 条件 | Hard Cap | 理由 |
+|------|---------|------|
+| S-004 数据盲区触发 | ≤40 | 风控系统失明 |
+| S-009 Watchdog 失联 | ≤30 | 最后防线失效 |
+| S-018 Canary 连续失败 | ≤40 | 告警链路可能断裂 |
+| 任何 T0/F0 指标 lag≥1000ms | ≤50 | 实时链路延迟不可接受 |
+| 多指标同时静默 (≥3) | ≤50 | 批量失效风险 |
+
+#### 8.10.5 运行态状态机
+
+```
+         score≥80 且无外部异常
+              ┌──────────┐
+              │ healthy  │
+              └────┬─────┘
+     score<80 │         │ 外部异常
+              ▼         ▼
+  ┌──────────────┐  ┌───────────────────┐
+  │ internal_    │  │ external_         │
+  │ degraded     │  │ degraded          │
+  └──────┬───────┘  └─────────┬─────────┘
+         │ score<50           │ + 内部也<80
+         ▼                    ▼
+         ┌──────────────────────┐
+         │      critical        │
+         └──────────────────────┘
+```
+
+状态切换触发 S-017 告警（L1/L2/L3 按严重程度递增）+ 即时健康报告。
+
+#### 8.10.6 Canary 探针（S-018）
+
+独立于主链路的端到端验证：每 15 分钟向 Telegram 发送测试消息，通过 `getUpdates` API 验证消息往返。连续 2 次失败触发 L2 告警，3 次触发 L3。
+
+**工程要点**：
+- 使用独立 Telegram Bot Token，与业务告警 Bot 分离
+- 不经过主链路的 Kafka → Notifier 路径，直接调用 Telegram API
+- 结果写入 IND-S-018 供 S-017 健康度评分消费
+
+### 8.11 风控控制台架构（V3.0 新增）
+
+> 本小节对应独立设计文档 `dashboard_design.md`（V1.0）。风控控制台不是"监控看板"，而是**分层治理、按对象生效、按角色受限、支持审批发布**的风控管理平台。
+
+#### 8.11.1 产品定位与三层能力
+
+| 能力层 | 面向角色 | 核心能力 |
+|--------|----------|----------|
+| **观察层** | 值班、管理层、只读 | 系统健康度、告警态势、风险对象状态 |
+| **配置层** | 管理员、交易员 | 指标运行参数、规则阈值/动作/生效范围、继承覆盖 |
+| **治理层** | 超级管理员 | 角色权限、配置审批与发布、变更审计、回滚 |
+
+#### 8.11.2 信息架构（8 个一级页面）
+
+| 页面 | 核心功能 | 复杂度 |
+|------|---------|--------|
+| 总览 Home | 健康度卡片 + 告警统计 + 链路状态 + 高风险对象 | 中 |
+| 健康度 Health | 五维分解 + 健康规则状态 + 容量瓶颈 + 健康报告 | 高 |
+| 告警中心 Alerts | 事件列表 + 筛选 + 处置流程 | 中 |
+| 对象管理 Objects | 四层治理树 + 对象详情(生效规则/指标/告警/变更) | 高 |
+| 指标库 Indicators | 指标目录 + 运行态 + 配置 + 依赖图 | 中 |
+| 规则库 Rules | 规则模板 + 规则视图 + 对象视图 + 差异视图 | 最高 |
+| 变更中心 Changes | 双轨发布(Draft→Preview→Approval→Publish) + 审计 + 回滚 | 高 |
+| 权限管理 Access | 用户管理 + RBAC + Scope 绑定 + 权限矩阵 | 中 |
+
+#### 8.11.3 RBAC + Scope 权限模型
+
+**4 种角色**：
+
+| 角色 | 代号 | 定位 |
+|------|------|------|
+| SuperAdmin | SA | 平台最高管理员，全局权限 |
+| Admin | ADM | 风控管理员/项目负责人，可被限定到特定 Project |
+| Trader | TRD | 交易员/策略运营，可被限定到特定 Team/Strategy |
+| Viewer | VW | 只读观察员/值班 |
+
+**Scope 绑定**：每个用户除角色外，还绑定 scope（global / project / team / strategy / account），实现细粒度访问控制。所有 API 请求经 scope 中间件过滤，非 global-SuperAdmin 的查询自动注入 `WHERE scope_id IN (...)` 条件。
+
+**关键权限矩阵**：
+
+| 操作 | SA | ADM | TRD | VW |
+|------|-----|------|------|-----|
+| 修改规则模板 | ✅ | ❌ | ❌ | ❌ |
+| 创建/修改规则绑定 | ✅ | ✅(scope内) | ✅(scope内,低风险) | ❌ |
+| 审批高风险变更 | ✅ | ❌ | ❌ | ❌ |
+| 审批中风险变更 | ✅ | ✅ | ❌ | ❌ |
+| 回滚配置 | ✅ | ❌ | ❌ | ❌ |
+| 管理用户/角色 | ✅ | ❌ | ❌ | ❌ |
+
+#### 8.11.4 规则配置数据模型
+
+规则配置采用**模板 + 绑定**分离架构，对齐已有 `rule_bindings` 表（database-schema.md §2.3）：
+
+- **Rule Template**（`risk_rules` 表）：平台维护的标准定义，含默认阈值/动作/时间策略
+- **Rule Binding**（`rule_bindings` 表）：scope 级参数覆盖，支持三种操作：
+  - **继承**：不做配置，沿用上层
+  - **覆盖**：只改部分参数，其余继承（JSON config 部分 merge）
+  - **显式关闭**：`enabled=false`，即使上层启用也不检测
+
+生效解析算法：`Account > Strategy > Team > Project > Global`，逐层 merge，就近生效。
+
+#### 8.11.5 双轨配置发布
+
+高风险配置变更不能直接生效，必须走审批流：
+
+```
+草稿 Draft → 预览 Preview (影响分析) → 审批 Approval → 发布 Publish
+                                                        ↓
+                                                    回滚 Rollback
+```
+
+| 风险等级 | 触发条件 | 发布要求 |
+|----------|---------|---------|
+| 🟢 低 | cooldown 微调等 | Trader 可直接发布 |
+| 🟡 中 | 关键规则阈值变更 | Admin 审批后发布 |
+| 🔴 高 | L/S/P0/P1 规则变更、全局修改 | SuperAdmin 审批后发布 |
+
+#### 8.11.6 新增数据库表
+
+```sql
+-- 用户表
+CREATE TABLE users (
+  id VARCHAR(36) PRIMARY KEY,
+  username VARCHAR(64) NOT NULL UNIQUE,
+  email VARCHAR(256),
+  role ENUM('super_admin','admin','trader','viewer') NOT NULL,
+  status ENUM('active','disabled') NOT NULL DEFAULT 'active',
+  created_at TIMESTAMP, updated_at TIMESTAMP
+);
+
+-- 用户 Scope 绑定
+CREATE TABLE user_scopes (
+  id VARCHAR(36) PRIMARY KEY,
+  user_id VARCHAR(36) NOT NULL,
+  scope_type ENUM('global','project','team','strategy','account') NOT NULL,
+  scope_id VARCHAR(36),
+  UNIQUE(user_id, scope_type, scope_id)
+);
+
+-- 配置草稿
+CREATE TABLE config_drafts (
+  id VARCHAR(36) PRIMARY KEY,
+  change_type ENUM('rule_binding','indicator_config','object') NOT NULL,
+  target_table VARCHAR(64) NOT NULL,
+  target_id VARCHAR(36) NOT NULL,
+  diff_json JSON NOT NULL,
+  risk_level ENUM('low','medium','high') NOT NULL,
+  status ENUM('draft','pending_approval','approved','published','rejected','rolled_back') NOT NULL,
+  submitted_by VARCHAR(36) NOT NULL,
+  approved_by VARCHAR(36),
+  published_at TIMESTAMP,
+  created_at TIMESTAMP, updated_at TIMESTAMP
+);
+
+-- 配置审计日志
+CREATE TABLE config_audit_logs (
+  id VARCHAR(36) PRIMARY KEY,
+  draft_id VARCHAR(36),
+  action ENUM('create','submit','approve','reject','publish','rollback') NOT NULL,
+  operator_id VARCHAR(36) NOT NULL,
+  detail JSON,
+  created_at TIMESTAMP
+);
+```
+
+#### 8.11.7 技术栈与部署
+
+- **前端**：React + Ant Design Pro，单页应用，通过 Go API 后端交互
+- **后端**：Go Config API 服务（已有的配置 API 扩展），新增 Dashboard API 路由组
+- **API 设计**：约 30 个端点，分 7 组（health、alerts、objects、indicators、rules、changes、access）
+- **部署**：前端构建为静态资源，由 Go 服务或 Nginx 托管；与配置 API 共享同一进程或独立部署
+
+### 8.12 部署拓扑（V3.0 更新）
+
+> V3.0 在 V2.7 的基础上新增健康治理子系统和风控控制台的部署单元。
+
+```
+┌─────────────── Docker Compose / K8s ───────────────┐
+│                                                     │
+│  [公共 Ingestor]  ×N（按交易所+symbol 分片）         │
+│  [私有 Ingestor]  ×M（按 account 分片）              │
+│  [指标引擎]       ×1~2（主备或按指标类别分片）        │
+│  [规则引擎]       ×1~2（主备或按规则类别分片）        │
+│  [配置 API + Dashboard API]  ×1~2                   │  ← V3.0 扩展
+│  [Dashboard 前端]  ×1（Nginx 静态托管）              │  ← V3.0 新增
+│  [告警服务]       ×1                                │
+│  [Watchdog]       ×1（独立部署，最小依赖）           │
+│  [Canary 探针]    ×1（独立容器，最小依赖）           │  ← V3.0 新增
+│                                                     │
+│  [Kafka]          3-node cluster                    │
+│  [Redis]          Sentinel / Cluster                │
+│  [MySQL]          Primary + Replica                 │
+│  [ClickHouse]     Single / Cluster                  │
+└─────────────────────────────────────────────────────┘
+```
+
 ---
 
 ## 9. MVP 实施范围与版本路线图
 
-### 9.1 MVP 首批交付标准
+### 9.1 MVP 首批交付标准（V3.0 更新）
 
-> MVP 将跑通完整的 Data → Indicator → Rule 三级管道：公共/私有数据中心的接入（数据层）、指标引擎的核心指标计算（指标层）、规则引擎的 49 条 MVP 规则评估与告警流转（规则层）、以及基础控制动作（控制层）。
+> MVP 将跑通完整的 Data → Indicator → Rule → Alert 管道，并交付健康治理子系统和风控控制台的基础版本。
 
-**重点保障以下 CEX 高危场景在 MVP 落地：**
+**MVP 核心交付物**：
 
-| 场景 | 对应规则 | 方法论层 |
+| 模块 | 交付内容 | 对应文档 |
 |------|---------|---------|
-| API 频控耗尽预警 | S-016 | 预警层 |
-| Wash Trade/自成交预警 | B-010 | 预警层 |
-| 账户/平台限制状态捕获 | C-004 | 预警层 |
-| API Key 一键吊销 + 防风暴 | Blast Radius | 控制层 |
-| 大额/异常提币监控 | P-006 | 预警层 |
-| 公共数据中心（WS+REST） | 4.2 | 监测层（数据层） |
-| 私有数据中心（WS+REST） | 4.3 | 监测层（数据层） |
-| 指标引擎（75 指标，T0~T4 分层） | 8.3 | 指标层 |
-| 规则引擎（49 MVP 规则，F0~F4 分层） | 8.4 | 规则层 |
-| 策略元数据注册与基线查询 | 4.5 | 监测层 |
-| REST 快照时效性标记 | 4.6.1 | 监测层 |
-| 告警响应等级与优先级排序 | 5.1 | 预警层 |
-| Partner → API Key → Account 映射 | 3.3.1 | 识别层 |
-| 控制动作可逆性分级 | 5.3.3 | 预警层→控制层 |
-| 数据新鲜度向量 | 4.2.2 | 监测层 |
-| 风险预算消耗速率监控 | E-015 | 预警层 |
+| 数据层 | 公共+私有数据中心（WS+REST），2交易所×10symbols×5accounts | §4, §8.2 |
+| 指标层 | 85 个指标全量实现，T0~T4 分层计算 | §8.3, indicator_library_v2.0 |
+| 规则层 | 72 条 MVP 规则（含 S-014~S-018 健康治理规则），F0~F4 分层 | §8.4, rule_library_v3.0 |
+| 告警服务 | Telegram 三级通知（L1-info / L2-critical / L3-语音） | §5.1 |
+| 健康治理 | 双分数模型 + Hard Cap + 状态机 + Canary 探针 + 定时报告 | §8.10, system_health_score_design |
+| 风控控制台 | 8 页面 + RBAC 4角色 + 规则配置（模板+绑定+继承） + 变更审批 | §8.11, dashboard_design |
+| 控制动作 | R0~R2 基础控制（R0 通知, R1 限速, R2 撤单停新） | §6 |
+| 基础设施 | Kafka + Redis + MySQL + ClickHouse，Docker Compose 部署 | §8.12 |
 
-### 9.2 版本路线图
+**重点保障的 CEX 高危场景**：
+
+| 场景 | 对应规则 | 重要性 |
+|------|---------|--------|
+| 系统失明（WS断线+数据过期） | S-001~S-004 | P0 保命 |
+| 清算预警（MMR过低） | L-001~L-005 | P0 保命 |
+| 净 Delta 过大 | E-001 | P0 核心 |
+| API 频控耗尽 | S-006 | P0 核心 |
+| Wash Trade 预警 | B-010 | P1 合规 |
+| 健康度持续低下 | S-017 | P1 治理 |
+| 告警链路断裂 | S-018 Canary | P1 治理 |
+| 风控系统自身资源耗尽 | S-014, S-015 | P1 治理 |
+
+### 9.2 版本路线图（V3.0 更新）
 
 | 版本 | 周期 | 核心目标 | 方法论层覆盖 |
 |------|------|---------|------------|
-| **最小闭环** | 3 天 | 端到端验证（1 交易所 + 公共/私有 DC 各 1 通道 + 1 指标 + 1 规则 + 告警） | L0~L2 基础 |
-| **MVP** | +2.5 周 | 49 条 MVP 规则、75 指标引擎、四层治理、前端面板、Telegram 通知 | L0~L2 核心 + L3 基础 |
-| **V1.0** | +3 周 | 全量 71 条规则、级联触发、自动执行、Docker 部署 | L2~L3 完整 + L4 数据基座 |
-| **V2.0** | +4 周 | Evolve 规则回测、多交易所、基线自动校准 | L4 核心能力成熟 |
+| **最小闭环** | 3 天 | 端到端验证（1 交易所 + 公共/私有 DC 各 1 通道 + 1 指标 + 1 规则 + Telegram 告警） | L0~L2 基础 |
+| **MVP Phase 1** | +2 周 | 数据层完整 + 指标引擎 85 指标 + 规则引擎 72 条 MVP 规则 + Telegram 通知 + 基础健康度评分 | L0~L2 核心 + L3 基础 |
+| **MVP Phase 2** | +2 周 | 风控控制台 v1（Home+Health+Alerts+Objects），RBAC 基础版（SA+Viewer），对象管理与生效规则查看 | 观察层 + 配置层基础 |
+| **MVP Phase 3** | +2 周 | 规则配置中心（模板+绑定+继承+三视图），变更审批流，Canary 探针，完整 RBAC 4 角色 | 配置层 + 治理层 |
+| **V1.0** | +3 周 | 全量 82 条规则、级联触发、自动执行、R3 控制动作、Docker 生产部署 | L2~L3 完整 + L4 数据基座 |
+| **V2.0** | +4 周 | Evolve 规则回测、多交易所扩展、基线自动校准、微观结构风控 | L4 核心能力成熟 |
 
-### 9.3 未来迭代方向（二期 / 三期）
+### 9.3 MVP 各 Phase 详细交付清单
+
+#### Phase 1：核心管道（~2 周）
+
+**目标**：三级管道端到端跑通，核心规则生效，告警可达。
+
+| 交付项 | 说明 | 验收标准 |
+|--------|------|---------|
+| 公共 Ingestor | Binance WS(orderbook/trades/mark/ticker) + REST(depth/OI/exchange_info) | 数据持续写入 Kafka + Redis |
+| 私有 Ingestor | Binance WS(orders/positions/balance) + REST(position_snap/balance_snap) | 同上 |
+| 指标引擎 | 85 指标全量，T0~T4 分层 | 所有指标产出到 Redis，ClickHouse 归档 |
+| 规则引擎 | 72 条 MVP 规则，F0~F4 分层 | RiskEvent 产出到 Kafka + MySQL |
+| 告警服务 | Telegram Bot L1/L2/L3 通知 | 收到告警消息 |
+| Watchdog | 独立进程，监控全链路存活 | Watchdog 能独立报警 |
+| 基础健康度 | S-017 评分（五维加权 + Hard Cap），S-014/S-015/S-016 | 健康分写入 Redis |
+| MySQL 种子数据 | 四层治理模型(projects/teams/strategies/accounts) + 规则配置 + API Key 配置 | 数据库初始化完成 |
+| Docker Compose | 全套服务编排 | `docker-compose up` 一键启动 |
+
+#### Phase 2：观察层控制台（~2 周）
+
+**目标**：值班人员可以通过浏览器看到系统全貌。
+
+| 交付项 | 说明 | 验收标准 |
+|--------|------|---------|
+| Dashboard 前端脚手架 | React + Ant Design Pro + 路由 + 鉴权框架 | 登录后可见导航菜单 |
+| 总览 Home | 健康度卡片 + 告警统计 + 链路状态 + 高风险对象 + 最近告警 | 数据实时刷新 |
+| 健康度 Health | 五维分解 + 健康规则状态 + 容量瓶颈 + 健康报告列表 | 可看到五维评分 |
+| 告警中心 Alerts | 事件列表 + 多维筛选 + 确认/处理/关闭操作 | 告警可被处置 |
+| 对象管理 Objects | 四层治理树 + 对象详情(概览+生效规则+指标+告警) | 可看到任意账户的生效规则 |
+| RBAC 基础 | users + user_scopes 表 + SA/Viewer 两角色 + JWT 鉴权 | 登录分角色 |
+| Dashboard API | ~15 个核心 API（health/alerts/objects/indicators 读取类） | Swagger 文档 |
+
+#### Phase 3：配置层与治理层（~2 周）
+
+**目标**：管理员可以通过控制台配置规则、审批变更。
+
+| 交付项 | 说明 | 验收标准 |
+|--------|------|---------|
+| 指标库 Indicators | 指标目录 + 运行态 + 指标配置（Admin+可编辑） | 可修改指标运行参数 |
+| 规则库 Rules | 规则模板列表 + 规则视图(分层绑定树) + 对象视图 + 差异视图 | 三个视图均可用 |
+| 规则绑定编辑 | 继承/覆盖/显式关闭表单 + 保存为草稿 | 可编辑并保存草稿 |
+| 变更中心 Changes | 变更列表 + 风险分级 + 审批/拒绝/发布/回滚操作 | 审批流端到端跑通 |
+| 权限管理 Access | 用户管理 + 完整 4 角色 + Scope 绑定 + 权限矩阵 | 不同角色看到不同内容 |
+| Canary 探针 | S-018 独立容器 + Canary 结果时间线 | 每 15min 验证一次告警链路 |
+| 完整 RBAC | Admin/Trader 角色 + scope 中间件 + 操作级权限控制 | 4 角色权限矩阵生效 |
+
+### 9.4 未来迭代方向（二期 / 三期）
 
 - 微观结构风控：更精细的毒性订单流（Toxic Flow）分析
 - 合规图谱：多账户间深度的资金划转与行为相似性聚类图谱
@@ -1437,6 +1760,9 @@ Kafka topic 的 partition key 按 `entity_grain`（如 `binance:BTC-USDT:acct001
 - 策略行为基线自动校准（4.1.2 → 7.2 E-L3）
 - 级联失效自动关联检测（5.4）
 - 交易所故障模式库与自动归因（4.1.1）
+- 移动端告警与处置（App / 小程序）
+- 多交易所统一配置同步
+- Dashboard 实时推送（WebSocket → 替代轮询）
 
 ---
 
@@ -1459,19 +1785,33 @@ Kafka topic 的 partition key 按 `entity_grain`（如 `binance:BTC-USDT:acct001
 | 第 2 章 | 总览 | 五层方法论框架 |
 | 第 3 章 | **L0 识别** | 风险维度/对象/状态、治理模型、多账户治理 |
 | 第 4 章 | **L1 监测** | 公共数据中心 + 私有数据中心（各含 WS/REST）、真相源、新鲜度向量 |
-| 第 5 章 | **L2 预警** | 71 条规则、响应等级、仲裁机制、级联失效 |
+| 第 5 章 | **L2 预警** | 82 条规则（含 S-014~S-018 健康治理）、响应等级、仲裁机制、级联失效 |
 | 第 6 章 | **L3 控制** | 动作分层、可逆性、防反噬、保命约束 |
 | 第 7 章 | **L4 演进** | 能力金字塔、回测、基线校准、反馈闭环 |
-| 第 8 章 | 工程 | **Data→Indicator→Rule 三级管道**、数据层/指标层/规则层工程设计、存储与部署 |
-| 第 9 章 | 规划 | MVP 范围、版本路线图 |
+| 第 8 章 | 工程 | **Data→Indicator→Rule 三级管道**、数据层/指标层/规则层工程设计、存储与部署、**健康治理子系统（§8.10）、风控控制台（§8.11）** |
+| 第 9 章 | 规划 | MVP 范围（3 Phase 交付）、版本路线图 |
 | 第 10 章 | 治理 | 组织治理、防内鬼 |
 
-## 附录 B：三级管道数据流速查表（V2.7 新增）
+## 附录 B：三级管道数据流速查表（V3.0 更新）
 
 | 阶段 | 输入 | 处理 | 输出 | 存储 |
 |------|------|------|------|------|
 | **公共数据中心** | 交易所公共 API（WS+REST） | Schema 校验 → 标准化 → 新鲜度标记 | Kafka public.* topics | Redis（最新状态）、ClickHouse（归档） |
 | **私有数据中心** | 交易所私有 API（WS+REST） | Schema 校验 → 标准化 → 新鲜度标记 | Kafka private.* topics | Redis（最新状态）、ClickHouse（归档） |
-| **指标引擎** | Kafka（原始数据）、Redis（最新状态） | T0~T4 分层计算 75 个指标 | Redis（指标最新值）、Kafka（指标变更事件） | ClickHouse（指标时序归档） |
+| **指标引擎** | Kafka（原始数据）、Redis（最新状态） | T0~T4 分层计算 85 个指标（含 6 signal） | Redis（指标最新值）、Kafka（指标变更事件） | ClickHouse（指标时序归档） |
+| **规则引擎** | Redis（指标最新值）、Kafka（指标变更事件）、MySQL（规则配置+治理模型） | F0~F4 分层评估 82 条规则 | RiskEvent → Kafka risk.events | MySQL（审计持久化） |
+| **健康治理子系统** | Redis（S-Class 指标值）、Kafka（指标变更事件） | 五维加权 + Hard Cap + 状态机 | IND-S-017(score)、健康报告 | Redis + MySQL(报告) |
+| **Canary 探针** | Telegram API（独立链路） | 发送测试消息 → 验证往返 | IND-S-018(success/fail) | Redis |
+| **风控控制台** | Go API（读 MySQL + Redis） | RBAC 过滤 + Scope 注入 | 前端页面渲染 | MySQL（配置草稿、审计日志） |
+
+## 附录 C：文档交叉引用索引（V3.0 新增）
+
+| 文档 | 版本 | 核心内容 | 本文引用章节 |
+|------|------|---------|------------|
+| `indicator_library_v2.0.md` | V2.0 | 85 个指标的完整定义（ID/名称/公式/层级/粒度/消费规则） | §8.3, §8.10.2 |
+| `rule_library_v3.0_checklist.md` | V3.0 | 82 条规则的完整 23 字段定义（含 S-014~S-018） | §8.4, §8.10.2 |
+| `system_health_score_design.md` | V3.0 | 健康治理子系统完整设计（双分数模型/Hard Cap/状态机/报告模板） | §8.10 |
+| `dashboard_design.md` | V1.0 | 风控控制台完整设计（8页面/RBAC/规则配置/API设计/MVP分期） | §8.11 |
+| `database-schema.md` | — | 数据库表结构（四层治理表/rule_bindings/api_key_configs） | §3.5, §5, §8.11.4 |
 | **规则引擎** | Redis（指标值）、Kafka（指标事件）、MySQL（规则配置） | F0~F4 分层评估 71 条规则 | RiskEvent → Kafka risk.events | MySQL（审计事件） |
 | **告警与控制** | Kafka（RiskEvent） | 通知分发 + 控制动作执行 | Telegram 告警、API 调用（控制动作） | MySQL（动作审计日志） |

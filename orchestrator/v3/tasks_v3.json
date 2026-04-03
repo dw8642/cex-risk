@@ -1,0 +1,177 @@
+{
+  "meta": {
+    "project": "CEX 做市风控系统",
+    "version": "V3.0",
+    "plan_doc": "docs/multi_agent_development_plan.md",
+    "architecture_doc": "docs/risk_control_plan_v3.0.md",
+    "total_sprints": 6,
+    "estimated_days": 25,
+    "agents": {
+      "F": { "name": "Agent-F", "role": "Foundation",   "branch": "agent-f/current", "dirs": ["pkg/store/*", "pkg/model/*", "deploy/*", "cmd/*/main.go", "internal/config/*"] },
+      "D": { "name": "Agent-D", "role": "Data",         "branch": "agent-d/current", "dirs": ["internal/ingestor/*", "pkg/exchange/*", "cmd/ingestor-public/", "cmd/ingestor-private/"] },
+      "I": { "name": "Agent-I", "role": "Indicator",    "branch": "agent-i/current", "dirs": ["internal/indicator/*", "cmd/indicator-engine/"] },
+      "R": { "name": "Agent-R", "role": "Rule+Alert",   "branch": "agent-r/current", "dirs": ["internal/rule/*", "internal/health/*", "internal/alert/*", "cmd/rule-engine/", "cmd/alert-service/"] },
+      "S": { "name": "Agent-S", "role": "Sentinel",     "branch": "agent-s/current", "dirs": ["internal/watchdog/*", "internal/canary/*", "cmd/watchdog/", "cmd/canary/"] },
+      "W": { "name": "Agent-W", "role": "Web/UI",       "branch": "agent-w/current", "dirs": ["web/*", "internal/api/*", "cmd/api-server/"] },
+      "Q": { "name": "Agent-Q", "role": "QA",           "branch": "agent-q/current", "dirs": ["tests/*"] }
+    }
+  },
+
+  "gates": {
+    "gate-1": {
+      "name": "基座就绪",
+      "description": "MySQL Schema 已初始化、Redis/Kafka/ClickHouse 可连、pkg/store/* 有可编译接口、pkg/model/* 数据模型已定义",
+      "checks": [
+        { "id": "g1-mysql",     "cmd": "go build ./pkg/store/...",                    "expect": "exit 0" },
+        { "id": "g1-model",     "cmd": "go build ./pkg/model/...",                    "expect": "exit 0" },
+        { "id": "g1-config",    "cmd": "go build ./internal/config/...",              "expect": "exit 0" },
+        { "id": "g1-compose",   "cmd": "docker compose -f deploy/docker-compose.yml config --quiet", "expect": "exit 0" },
+        { "id": "g1-cmd",       "cmd": "go build ./cmd/...",                          "expect": "exit 0" }
+      ],
+      "unlocks": ["D-01", "I-01", "R-01", "S-01", "S-03", "W-11", "Q-01"]
+    },
+    "gate-2": {
+      "name": "数据管道就绪",
+      "description": "公共/私有 Ingestor 写入 Kafka + Redis 可验证",
+      "depends_on_gate": "gate-1",
+      "checks": [
+        { "id": "g2-kafka-pub", "cmd": "kafka-console-consumer --bootstrap-server localhost:9092 --topic public.orderbook --max-messages 1 --timeout-ms 10000", "expect": "非空 JSON" },
+        { "id": "g2-kafka-pri", "cmd": "kafka-console-consumer --bootstrap-server localhost:9092 --topic private.orders --max-messages 1 --timeout-ms 10000",   "expect": "非空 JSON" },
+        { "id": "g2-redis",    "cmd": "redis-cli EXISTS raw:binance:orderbook:BTC-USDT", "expect": "1" }
+      ],
+      "unlocks": ["I-08"]
+    },
+    "gate-3": {
+      "name": "指标层就绪",
+      "description": "指标引擎 T0~T2 正常产出到 Redis，S-Class + L-Class 至少已实现",
+      "depends_on_gate": "gate-2",
+      "checks": [
+        { "id": "g3-indicator", "cmd": "redis-cli EXISTS ind:IND-S-001:binance:BTC-USDT", "expect": "1" },
+        { "id": "g3-test",     "cmd": "go test ./internal/indicator/... -count=1",       "expect": "exit 0" },
+        { "id": "g3-coverage", "cmd": "go test ./internal/indicator/... -run TestSClass -count=1", "expect": "exit 0" }
+      ],
+      "unlocks": ["R-11"]
+    },
+    "gate-4": {
+      "name": "规则层就绪",
+      "description": "规则引擎 F0~F2 正常评估并产出 RiskEvent，告警服务可发 Telegram",
+      "depends_on_gate": "gate-3",
+      "checks": [
+        { "id": "g4-rule-test",  "cmd": "go test ./internal/rule/... -count=1",  "expect": "exit 0" },
+        { "id": "g4-health",     "cmd": "go test ./internal/health/... -count=1", "expect": "exit 0" },
+        { "id": "g4-alert",      "cmd": "go test ./internal/alert/... -count=1",  "expect": "exit 0" },
+        { "id": "g4-riskevent",  "cmd": "redis-cli EXISTS riskevent:latest",      "expect": "1" }
+      ],
+      "unlocks": ["W-12"]
+    },
+    "gate-5": {
+      "name": "API 就绪",
+      "description": "Dashboard API 读取类端点全部可用，Swagger 文档已生成",
+      "depends_on_gate": "gate-4",
+      "checks": [
+        { "id": "g5-api-health",  "cmd": "curl -sf http://localhost:8080/api/v1/health/score",  "expect": "HTTP 200" },
+        { "id": "g5-api-alerts",  "cmd": "curl -sf http://localhost:8080/api/v1/alerts",        "expect": "HTTP 200" },
+        { "id": "g5-api-objects", "cmd": "curl -sf http://localhost:8080/api/v1/objects/tree",   "expect": "HTTP 200" },
+        { "id": "g5-swagger",     "cmd": "test -f internal/api/docs/swagger.json",              "expect": "exit 0" }
+      ],
+      "unlocks": ["W-13", "Q-07"]
+    },
+    "gate-6": {
+      "name": "配置 API 就绪",
+      "description": "规则绑定 CRUD API 可用、变更审批 API 可用、RBAC scope 中间件生效",
+      "depends_on_gate": "gate-5",
+      "checks": [
+        { "id": "g6-binding-crud", "cmd": "go test ./internal/api/... -run TestRuleBinding -count=1", "expect": "exit 0" },
+        { "id": "g6-changes",     "cmd": "go test ./internal/api/... -run TestChanges -count=1",     "expect": "exit 0" },
+        { "id": "g6-rbac",        "cmd": "go test ./internal/api/... -run TestRBAC -count=1",        "expect": "exit 0" }
+      ],
+      "unlocks": ["Q-08", "Q-09"]
+    }
+  },
+
+  "tasks": {
+    "F-01": { "agent": "F", "title": "Go module 初始化 + 目录结构 + Makefile",            "hours": 2.4, "depends": [],         "gate_unlock": null,     "sprint": 0 },
+    "F-02": { "agent": "F", "title": "pkg/model/* 全量数据模型定义",                        "hours": 4,   "depends": [],         "gate_unlock": null,     "sprint": 0 },
+    "F-03": { "agent": "F", "title": "pkg/store/redis.go Redis 客户端封装 + 指标读写接口",   "hours": 2.4, "depends": ["F-01"],   "gate_unlock": null,     "sprint": 0 },
+    "F-04": { "agent": "F", "title": "pkg/store/mysql.go MySQL 客户端 + GORM + 迁移",      "hours": 2.4, "depends": ["F-01"],   "gate_unlock": null,     "sprint": 0 },
+    "F-05": { "agent": "F", "title": "pkg/store/kafka.go Kafka 生产者/消费者封装",           "hours": 2.4, "depends": ["F-01"],   "gate_unlock": null,     "sprint": 0 },
+    "F-06": { "agent": "F", "title": "pkg/store/clickhouse.go ClickHouse 写入封装",         "hours": 1.6, "depends": ["F-01"],   "gate_unlock": null,     "sprint": 0 },
+    "F-07": { "agent": "F", "title": "deploy/init_mysql.sql 全表 DDL + 种子数据",           "hours": 4,   "depends": ["F-02"],   "gate_unlock": null,     "sprint": 0 },
+    "F-08": { "agent": "F", "title": "deploy/docker-compose.yml 全套中间件 + 服务骨架",     "hours": 4,   "depends": ["F-01"],   "gate_unlock": null,     "sprint": 0 },
+    "F-09": { "agent": "F", "title": "internal/config/* 配置加载框架 Viper",                "hours": 2.4, "depends": ["F-01"],   "gate_unlock": null,     "sprint": 0 },
+    "F-10": { "agent": "F", "title": "各 cmd/*/main.go 入口骨架",                          "hours": 2.4, "depends": ["F-09"],   "gate_unlock": null,     "sprint": 0 },
+    "F-11": { "agent": "F", "title": "Kafka Topic 创建脚本 + Redis Key 命名文档",           "hours": 1.6, "depends": ["F-08"],   "gate_unlock": "gate-1", "sprint": 0 },
+
+    "D-01": { "agent": "D", "title": "Binance API 适配层 WS + REST",                      "hours": 12,  "depends": ["gate-1"], "gate_unlock": null,     "sprint": 1 },
+    "D-02": { "agent": "D", "title": "WS 连接管理器（自动重连 + 心跳）",                     "hours": 8,   "depends": ["D-01"],   "gate_unlock": null,     "sprint": 1 },
+    "D-03": { "agent": "D", "title": "REST 轮询调度器（频控管理 + 动态调速）",                "hours": 8,   "depends": ["D-01"],   "gate_unlock": null,     "sprint": 1 },
+    "D-04": { "agent": "D", "title": "Schema 校验（字段完整性 + 类型检查）",                  "hours": 4,   "depends": ["D-01"],   "gate_unlock": null,     "sprint": 1 },
+    "D-05": { "agent": "D", "title": "标准化发布 Kafka + Redis + ClickHouse",               "hours": 4,   "depends": ["gate-1"], "gate_unlock": null,     "sprint": 1 },
+    "D-06": { "agent": "D", "title": "公共 Ingestor 集成",                                 "hours": 8,   "depends": ["D-02", "D-03", "D-04", "D-05"], "gate_unlock": null, "sprint": 2 },
+    "D-07": { "agent": "D", "title": "私有 Ingestor 集成",                                 "hours": 8,   "depends": ["D-02", "D-03", "D-04", "D-05"], "gate_unlock": null, "sprint": 2 },
+    "D-08": { "agent": "D", "title": "数据层自测",                                         "hours": 4,   "depends": ["D-06", "D-07"], "gate_unlock": "gate-2", "sprint": 2 },
+
+    "I-01": { "agent": "I", "title": "指标引擎 T0~T4 Worker 调度框架",                     "hours": 12,  "depends": ["gate-1"], "gate_unlock": null,     "sprint": 1 },
+    "I-02": { "agent": "I", "title": "Phase 串行计算保证 L0/L1→L2/L3",                     "hours": 4,   "depends": ["I-01"],   "gate_unlock": null,     "sprint": 1 },
+    "I-03": { "agent": "I", "title": "指标 Registry 机制",                                 "hours": 4,   "depends": ["I-01"],   "gate_unlock": null,     "sprint": 1 },
+    "I-04": { "agent": "I", "title": "S-Class 指标实现（23个含健康治理）",                   "hours": 12,  "depends": ["I-01"],   "gate_unlock": null,     "sprint": 1 },
+    "I-05": { "agent": "I", "title": "L-Class 指标实现（清算类）",                           "hours": 4,   "depends": ["I-01"],   "gate_unlock": null,     "sprint": 2 },
+    "I-06": { "agent": "I", "title": "E-Class 指标实现（敞口类）",                           "hours": 4,   "depends": ["I-01"],   "gate_unlock": null,     "sprint": 2 },
+    "I-07": { "agent": "I", "title": "P/B/M/C/BASE/STR-Class 指标实现",                    "hours": 12,  "depends": ["I-01"],   "gate_unlock": null,     "sprint": 2 },
+    "I-08": { "agent": "I", "title": "与 Agent-D 联调：真实 Kafka 数据验证",                 "hours": 4,   "depends": ["gate-2", "I-04", "I-05", "I-06", "I-07"], "gate_unlock": "gate-3", "sprint": 2 },
+
+    "R-01": { "agent": "R", "title": "规则引擎 F0~F4 调度框架",                             "hours": 12,  "depends": ["gate-1"], "gate_unlock": null,     "sprint": 1 },
+    "R-02": { "agent": "R", "title": "四层治理继承解析 + 预编译缓存",                         "hours": 8,   "depends": ["R-01"],   "gate_unlock": null,     "sprint": 1 },
+    "R-03": { "agent": "R", "title": "RiskEvent 产出 + Kafka + Cooldown 去重",              "hours": 4,   "depends": ["R-01"],   "gate_unlock": null,     "sprint": 1 },
+    "R-04": { "agent": "R", "title": "S-Class 规则实现（18条含 S-014~S-018）",               "hours": 8,   "depends": ["R-01"],   "gate_unlock": null,     "sprint": 2 },
+    "R-05": { "agent": "R", "title": "L/E/P/M/B/C/STR-Class 规则实现（54条）",              "hours": 20,  "depends": ["R-01"],   "gate_unlock": null,     "sprint": 2 },
+    "R-06": { "agent": "R", "title": "五维加权健康度 + Hard Cap",                           "hours": 4,   "depends": ["R-04"],   "gate_unlock": null,     "sprint": 2 },
+    "R-07": { "agent": "R", "title": "运行态状态机",                                        "hours": 4,   "depends": ["R-06"],   "gate_unlock": null,     "sprint": 2 },
+    "R-08": { "agent": "R", "title": "定时/即时健康报告",                                    "hours": 4,   "depends": ["R-07"],   "gate_unlock": null,     "sprint": 3 },
+    "R-09": { "agent": "R", "title": "Telegram Bot L1/L2/L3 通知",                         "hours": 4,   "depends": ["R-03"],   "gate_unlock": null,     "sprint": 2 },
+    "R-10": { "agent": "R", "title": "告警去重 + 持久化",                                   "hours": 2.4, "depends": ["R-03"],   "gate_unlock": null,     "sprint": 2 },
+    "R-11": { "agent": "R", "title": "与 Agent-I 联调：真实指标数据验证规则触发",              "hours": 4,   "depends": ["gate-3"], "gate_unlock": "gate-4", "sprint": 2 },
+
+    "S-01": { "agent": "S", "title": "Watchdog 进程存活检测",                               "hours": 8,   "depends": ["gate-1"], "gate_unlock": null,     "sprint": 1 },
+    "S-02": { "agent": "S", "title": "Watchdog 独立 Telegram 通知",                         "hours": 4,   "depends": ["S-01"],   "gate_unlock": null,     "sprint": 1 },
+    "S-03": { "agent": "S", "title": "Canary 探针",                                        "hours": 8,   "depends": ["gate-1"], "gate_unlock": null,     "sprint": 1 },
+    "S-04": { "agent": "S", "title": "Canary 结果写入 IND-S-018",                          "hours": 2.4, "depends": ["S-03"],   "gate_unlock": null,     "sprint": 1 },
+    "S-05": { "agent": "S", "title": "Canary + Watchdog 集成测试",                          "hours": 4,   "depends": ["S-01", "S-02", "S-03", "S-04"], "gate_unlock": null, "sprint": 1 },
+
+    "W-01": { "agent": "W", "title": "React 脚手架 + Ant Design Pro + Mock Service",       "hours": 8,   "depends": [],         "gate_unlock": null,     "sprint": 0 },
+    "W-02": { "agent": "W", "title": "JWT 鉴权框架 + 登录页",                               "hours": 4,   "depends": ["W-01"],   "gate_unlock": null,     "sprint": 0 },
+    "W-03": { "agent": "W", "title": "前端：总览 Home 页",                                  "hours": 8,   "depends": ["W-01"],   "gate_unlock": null,     "sprint": 1 },
+    "W-04": { "agent": "W", "title": "前端：健康度 Health 页（5 Tab + Recharts）",           "hours": 12,  "depends": ["W-01"],   "gate_unlock": null,     "sprint": 1 },
+    "W-05": { "agent": "W", "title": "前端：告警中心 Alerts 页",                             "hours": 8,   "depends": ["W-01"],   "gate_unlock": null,     "sprint": 1 },
+    "W-06": { "agent": "W", "title": "前端：对象管理 Objects 页（四层树）",                   "hours": 12,  "depends": ["W-01"],   "gate_unlock": null,     "sprint": 2 },
+    "W-07": { "agent": "W", "title": "前端：指标库 Indicators 页",                          "hours": 8,   "depends": ["W-01"],   "gate_unlock": null,     "sprint": 2 },
+    "W-08": { "agent": "W", "title": "前端：规则库 Rules 页（绑定编辑弹窗）",                 "hours": 16,  "depends": ["W-01"],   "gate_unlock": null,     "sprint": 2 },
+    "W-09": { "agent": "W", "title": "前端：变更中心 Changes 页",                            "hours": 8,   "depends": ["W-01"],   "gate_unlock": null,     "sprint": 3 },
+    "W-10": { "agent": "W", "title": "前端：权限管理 Access 页",                             "hours": 4,   "depends": ["W-01"],   "gate_unlock": null,     "sprint": 3 },
+    "W-11": { "agent": "W", "title": "Go: Dashboard API 路由框架 + JWT + Scope 中间件",     "hours": 8,   "depends": ["gate-1"], "gate_unlock": null,     "sprint": 1 },
+    "W-12": { "agent": "W", "title": "Go: Health/Alerts/Objects/Indicators 读取类 API",    "hours": 16,  "depends": ["gate-4"], "gate_unlock": "gate-5", "sprint": 3 },
+    "W-13": { "agent": "W", "title": "Go: Rules CRUD + Changes 审批 + Access API",         "hours": 16,  "depends": ["W-12"],   "gate_unlock": null,     "sprint": 4 },
+    "W-14": { "agent": "W", "title": "Go: RBAC 完整实现（4 角色 + scope 过滤）",             "hours": 8,   "depends": ["W-11"],   "gate_unlock": "gate-6", "sprint": 4 },
+    "W-15": { "agent": "W", "title": "前端对接真实 API（替换 Mock）",                        "hours": 12,  "depends": ["W-12", "W-13"], "gate_unlock": null, "sprint": 4 },
+
+    "Q-01": { "agent": "Q", "title": "Gate 验收脚本框架",                                   "hours": 4,   "depends": ["gate-1"], "gate_unlock": null,     "sprint": 1 },
+    "Q-02": { "agent": "Q", "title": "数据层测试：Ingestor→Kafka→Redis",                    "hours": 4,   "depends": ["gate-2"], "gate_unlock": null,     "sprint": 2 },
+    "Q-03": { "agent": "Q", "title": "指标层测试：85 指标覆盖率检查",                         "hours": 4,   "depends": ["gate-3"], "gate_unlock": null,     "sprint": 2 },
+    "Q-04": { "agent": "Q", "title": "规则层测试：模拟越限→RiskEvent 产出",                   "hours": 4,   "depends": ["gate-4"], "gate_unlock": null,     "sprint": 3 },
+    "Q-05": { "agent": "Q", "title": "告警端到端：RiskEvent→Telegram",                      "hours": 2.4, "depends": ["gate-4"], "gate_unlock": null,     "sprint": 3 },
+    "Q-06": { "agent": "Q", "title": "健康度测试：降级→Hard Cap→状态机",                     "hours": 4,   "depends": ["gate-4"], "gate_unlock": null,     "sprint": 3 },
+    "Q-07": { "agent": "Q", "title": "API 测试：读取类 + 配置类全覆盖",                      "hours": 8,   "depends": ["gate-5"], "gate_unlock": null,     "sprint": 4 },
+    "Q-08": { "agent": "Q", "title": "RBAC 测试：4 角色 × 操作矩阵",                        "hours": 4,   "depends": ["gate-6"], "gate_unlock": null,     "sprint": 5 },
+    "Q-09": { "agent": "Q", "title": "端到端全流程测试",                                    "hours": 8,   "depends": ["gate-6"], "gate_unlock": null,     "sprint": 5 },
+    "Q-10": { "agent": "Q", "title": "性能基准测试",                                        "hours": 4,   "depends": ["Q-09"],   "gate_unlock": null,     "sprint": 5 }
+  },
+
+  "sprints": {
+    "0": { "name": "Sprint 0: 基座 + 前端脚手架", "days": "Day 1~4",   "target_gate": "gate-1", "active_agents": ["F", "W"] },
+    "1": { "name": "Sprint 1: 数据 + 指标 + 规则框架", "days": "Day 3~10",  "target_gate": "gate-2", "active_agents": ["D", "I", "R", "S", "W", "Q"] },
+    "2": { "name": "Sprint 2: 指标 + 规则 + 联调",     "days": "Day 8~14",  "target_gate": "gate-3,gate-4", "active_agents": ["D", "I", "R", "Q"] },
+    "3": { "name": "Sprint 3: Dashboard 读取 API",      "days": "Day 12~18", "target_gate": "gate-5", "active_agents": ["R", "W", "Q"] },
+    "4": { "name": "Sprint 4: 配置 API + RBAC + 联调",  "days": "Day 16~22", "target_gate": "gate-6", "active_agents": ["W", "Q"] },
+    "5": { "name": "Sprint 5: E2E + Bug Fix + 交付",    "days": "Day 22~25", "target_gate": "MVP Done", "active_agents": ["W", "Q"] }
+  }
+}

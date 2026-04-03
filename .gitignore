@@ -24,6 +24,8 @@ Thumbs.db
 # Environment & secrets
 .env
 config.local.toml
+config.prod.toml
+config.server.toml
 
 # Docker volumes
 data/

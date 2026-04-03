@@ -476,7 +476,16 @@ cmd_run() {
         fi
 
         # 执行任务
-        _execute_task "$task_id"
+        if ! _execute_task "$task_id"; then
+            local task_status
+            task_status=$(get_state "$task_id")
+            if [ "$task_status" = "rate_limited" ]; then
+                log_error "检测到限流，暂停 ${day} 后续任务。限额重置后重新执行: ./orchestrator.sh run ${day}"
+                return 1
+            fi
+            log_warn "${task_id} 执行失败，继续下一个任务..."
+            continue
+        fi
 
         # 任务完成后合并到 main
         local agent
@@ -616,6 +625,14 @@ _execute_task() {
 
     rm -f "$prompt_file"
 
+    # 检测限流：日志为空或包含限流关键词
+    if [ -s "$log_file" ] && grep -qi "hit your limit\|rate.limit\|resets.*pm\|resets.*am\|quota.*exceeded" "$log_file" 2>/dev/null; then
+        log_error "检测到 Claude API 限流！任务 ${task_id} 标记为 rate_limited"
+        log_info "请等待限额重置后重新执行: ./orchestrator.sh run-task ${task_id}"
+        update_state "$task_id" "rate_limited"
+        return 1
+    fi
+
     if [ "$exit_code" -eq 0 ] && [ -s "$log_file" ]; then
         log_ok "任务 ${task_id} 执行完成"
         update_state "$task_id" "done"
@@ -631,9 +648,13 @@ _execute_task() {
         git push origin "agent-${agent}/current" 2>/dev/null || {
             log_warn "推送到远程失败（可能没有配置 remote），本地 commit 已保存"
         }
+    elif [ ! -s "$log_file" ]; then
+        log_error "任务 ${task_id} 日志为空（可能限流或 CLI 异常）"
+        log_info "标记为 rate_limited，请等待后重试: ./orchestrator.sh run-task ${task_id}"
+        update_state "$task_id" "rate_limited"
+        return 1
     else
-        rm -f "$prompt_file"
-        log_error "任务 ${task_id} 执行失败"
+        log_error "任务 ${task_id} 执行失败（exit_code=${exit_code}）"
         update_state "$task_id" "failed"
         return 1
     fi

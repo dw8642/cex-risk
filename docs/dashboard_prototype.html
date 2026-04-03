@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CEX 做市风控控制台 - 交互原型</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/antd/5.12.8/reset.min.css">
+<style>
+:root {
+  --primary: #1677ff;
+  --success: #52c41a;
+  --warning: #faad14;
+  --error: #ff4d4f;
+  --bg: #f5f5f5;
+  --sidebar-bg: #001529;
+  --sidebar-text: rgba(255,255,255,0.65);
+  --sidebar-active: #1677ff;
+  --card-bg: #fff;
+  --border: #f0f0f0;
+  --text: rgba(0,0,0,0.88);
+  --text-secondary: rgba(0,0,0,0.45);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; }
+
+/* Layout */
+.layout { display: flex; min-height: 100vh; }
+.sidebar { width: 220px; background: var(--sidebar-bg); color: var(--sidebar-text); flex-shrink: 0; display: flex; flex-direction: column; position: fixed; height: 100vh; z-index: 100; }
+.sidebar-logo { height: 56px; display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.sidebar-logo h2 { color: #fff; font-size: 16px; white-space: nowrap; }
+.sidebar-menu { flex: 1; padding: 8px 0; overflow-y: auto; }
+.menu-item { display: flex; align-items: center; padding: 10px 24px; cursor: pointer; transition: all 0.2s; font-size: 14px; gap: 10px; border-radius: 0 6px 6px 0; margin: 2px 0 2px 4px; }
+.menu-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.menu-item.active { background: var(--sidebar-active); color: #fff; font-weight: 500; }
+.menu-item .icon { font-size: 16px; width: 20px; text-align: center; }
+
+.sidebar-footer { padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.1); }
+.role-switcher { display: flex; flex-wrap: wrap; gap: 4px; }
+.role-btn { padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.65); cursor: pointer; font-size: 11px; transition: all 0.2s; background: transparent; }
+.role-btn:hover { border-color: var(--primary); color: var(--primary); }
+.role-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.role-label { color: rgba(255,255,255,0.4); font-size: 11px; margin-bottom: 4px; display: block; }
+
+.main { flex: 1; margin-left: 220px; }
+.header { height: 56px; background: #fff; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: sticky; top: 0; z-index: 50; }
+.header-left { font-size: 16px; font-weight: 600; }
+.header-right { display: flex; align-items: center; gap: 16px; }
+.header-time { color: var(--text-secondary); font-size: 13px; }
+.user-badge { display: flex; align-items: center; gap: 6px; padding: 4px 12px; background: #f0f5ff; border-radius: 20px; font-size: 12px; color: var(--primary); }
+
+.content { padding: 20px 24px; }
+
+/* Cards */
+.card { background: var(--card-bg); border-radius: 8px; padding: 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); border: 1px solid var(--border); }
+.card-title { font-size: 14px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+.card-title .subtitle { font-weight: 400; color: var(--text-secondary); font-size: 12px; }
+.card-grid { display: grid; gap: 16px; }
+.grid-2 { grid-template-columns: 1fr 1fr; }
+.grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+.grid-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+.grid-5 { grid-template-columns: repeat(5, 1fr); }
+.grid-2-1 { grid-template-columns: 2fr 1fr; }
+.grid-1-1 { grid-template-columns: 1fr 1fr; }
+
+/* Health Score */
+.health-big { text-align: center; }
+.health-big .score { font-size: 56px; font-weight: 700; line-height: 1; }
+.health-big .label { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+.health-big .max { font-size: 20px; color: var(--text-secondary); font-weight: 400; }
+
+.state-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 500; }
+.state-healthy { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+.state-degraded { background: #fff7e6; color: #faad14; border: 1px solid #ffd591; }
+.state-critical { background: #fff2f0; color: #ff4d4f; border: 1px solid #ffccc7; }
+
+/* Dimension cards */
+.dim-card { padding: 12px 16px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; transition: all 0.2s; }
+.dim-card:hover { border-color: var(--primary); box-shadow: 0 2px 8px rgba(22,119,255,0.1); }
+.dim-card .dim-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.dim-card .dim-name { font-weight: 500; font-size: 13px; }
+.dim-card .dim-score { font-size: 20px; font-weight: 700; }
+.dim-card .dim-bar { height: 4px; border-radius: 2px; background: #f0f0f0; overflow: hidden; }
+.dim-card .dim-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+
+/* Stat cards */
+.stat-card { text-align: center; padding: 16px; }
+.stat-card .stat-value { font-size: 28px; font-weight: 700; }
+.stat-card .stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+
+/* Alert level badges */
+.level-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.level-L3 { background: #fff2f0; color: #ff4d4f; }
+.level-L2 { background: #fff7e6; color: #fa8c16; }
+.level-L1 { background: #e6f4ff; color: #1677ff; }
+
+/* Status dots */
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.status-ok { background: var(--success); }
+.status-warn { background: var(--warning); }
+.status-error { background: var(--error); }
+.status-off { background: #d9d9d9; }
+
+/* Link chain */
+.chain { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chain-item { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 4px; font-size: 12px; color: #52c41a; }
+.chain-item.warn { background: #fff7e6; border-color: #ffd591; color: #fa8c16; }
+.chain-item.error { background: #fff2f0; border-color: #ffccc7; color: #ff4d4f; }
+
+/* Tables */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+table th { background: #fafafa; padding: 10px 12px; text-align: left; font-weight: 600; border-bottom: 1px solid var(--border); white-space: nowrap; }
+table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+table tr:hover td { background: #fafafa; }
+
+/* Tabs */
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.tab { padding: 10px 20px; cursor: pointer; font-size: 14px; color: var(--text-secondary); border-bottom: 2px solid transparent; transition: all 0.2s; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+
+/* Tree */
+.tree { font-size: 13px; }
+.tree-node { padding: 6px 8px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 6px; }
+.tree-node:hover { background: #f0f5ff; }
+.tree-node.selected { background: #e6f4ff; color: var(--primary); font-weight: 500; }
+.tree-children { padding-left: 20px; }
+.tree-icon { font-size: 14px; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 16px; border-radius: 6px; border: 1px solid var(--border); background: #fff; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+.btn:hover { border-color: var(--primary); color: var(--primary); }
+.btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn-primary:hover { background: #4096ff; }
+.btn-sm { padding: 3px 10px; font-size: 12px; }
+
+/* Tags */
+.tag { display: inline-flex; padding: 1px 8px; border-radius: 4px; font-size: 12px; }
+.tag-blue { background: #e6f4ff; color: #1677ff; }
+.tag-green { background: #f6ffed; color: #52c41a; }
+.tag-orange { background: #fff7e6; color: #fa8c16; }
+.tag-red { background: #fff2f0; color: #ff4d4f; }
+.tag-gray { background: #f5f5f5; color: rgba(0,0,0,0.45); }
+.tag-purple { background: #f9f0ff; color: #722ed1; }
+
+/* Source labels */
+.source { font-size: 12px; }
+.source-global { color: #8c8c8c; }
+.source-project { color: #1677ff; }
+.source-team { color: #722ed1; }
+.source-strategy { color: #13c2c2; }
+.source-account { color: #fa8c16; }
+.source-disabled { color: #ff4d4f; text-decoration: line-through; }
+
+/* Filter bar */
+.filter-bar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-bar select, .filter-bar input { padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: #fff; }
+.filter-bar select:focus, .filter-bar input:focus { border-color: var(--primary); outline: none; }
+
+/* Config form */
+.config-form { max-width: 560px; }
+.form-group { margin-bottom: 16px; }
+.form-label { font-weight: 500; margin-bottom: 6px; display: block; font-size: 13px; }
+.form-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.form-row label { display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 13px; }
+.form-row input[type="text"], .form-row input[type="number"] { padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; width: 100px; }
+.inherited-hint { color: var(--text-secondary); font-size: 12px; }
+
+/* Modal overlay */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); z-index: 1000; align-items: center; justify-content: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: #fff; border-radius: 12px; padding: 24px; width: 600px; max-height: 80vh; overflow-y: auto; box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+.modal-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+.modal-close { cursor: pointer; font-size: 18px; color: var(--text-secondary); background: none; border: none; }
+
+/* Rule tree binding */
+.binding-tree { font-size: 13px; line-height: 1.8; }
+.binding-tree .level { padding-left: 20px; border-left: 2px solid var(--border); margin-left: 8px; }
+.binding-tree .level-label { font-weight: 500; color: var(--text-secondary); }
+.binding-tree .override { color: var(--warning); font-weight: 500; }
+.binding-tree .inherited { color: var(--text-secondary); font-style: italic; }
+.binding-tree .disabled { color: var(--error); text-decoration: line-through; }
+
+/* Diff view */
+.diff-container { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.diff-col { padding: 12px 16px; }
+.diff-col:first-child { border-right: 1px solid var(--border); background: #fafafa; }
+.diff-col h4 { font-size: 13px; margin-bottom: 12px; }
+.diff-row { padding: 4px 0; font-size: 13px; display: flex; justify-content: space-between; }
+.diff-changed { background: #fff7e6; padding: 2px 6px; border-radius: 3px; }
+.diff-arrow { color: var(--warning); font-weight: 500; margin-left: 4px; }
+
+/* Change list status */
+.change-status { padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+.cs-draft { background: #f5f5f5; color: #8c8c8c; }
+.cs-pending { background: #fff7e6; color: #fa8c16; }
+.cs-approved { background: #e6f4ff; color: #1677ff; }
+.cs-published { background: #f6ffed; color: #52c41a; }
+.cs-rolled_back { background: #fff2f0; color: #ff4d4f; }
+
+/* Access page */
+.user-table .role-tag { padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 500; }
+.role-sa { background: #f9f0ff; color: #722ed1; }
+.role-adm { background: #e6f4ff; color: #1677ff; }
+.role-trd { background: #e6fffb; color: #13c2c2; }
+.role-vw { background: #f5f5f5; color: #8c8c8c; }
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .grid-5 { grid-template-columns: repeat(3, 1fr); }
+  .grid-4 { grid-template-columns: 1fr 1fr; }
+}
+
+/* Mini chart placeholder */
+.mini-chart { height: 40px; background: linear-gradient(90deg, transparent, transparent); display: flex; align-items: flex-end; gap: 1px; }
+.mini-chart .bar { flex: 1; background: var(--primary); opacity: 0.3; border-radius: 1px 1px 0 0; }
+
+/* Gauge */
+.gauge { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; position: relative; }
+.gauge::before { content: ''; position: absolute; inset: 3px; border-radius: 50%; background: #fff; }
+.gauge span { position: relative; z-index: 1; }
+
+/* Empty state */
+.empty { text-align: center; padding: 40px; color: var(--text-secondary); }
+
+/* Section spacing */
+.section { margin-bottom: 16px; }
+
+.page { display: none; }
+.page.active { display: block; }
+
+/* Toast for no-permission */
+.toast { position: fixed; top: 24px; right: 24px; background: #fff2f0; border: 1px solid #ffccc7; color: #ff4d4f; padding: 10px 20px; border-radius: 8px; z-index: 2000; display: none; font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.toast.show { display: block; animation: fadeIn 0.3s; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Progress bar for gauges */
+.progress-ring { width: 100%; height: 6px; background: #f0f0f0; border-radius: 3px; overflow: hidden; margin-top: 6px; }
+.progress-ring-fill { height: 100%; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="layout" id="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <h2>&#9881; CEX 风控控制台</h2>
+    </div>
+    <nav class="sidebar-menu" id="sidebarMenu">
+      <div class="menu-item active" data-page="home" onclick="navigate('home')">
+        <span class="icon">&#127968;</span> 总览 Home
+      </div>
+      <div class="menu-item" data-page="health" onclick="navigate('health')">
+        <span class="icon">&#128154;</span> 健康度 Health
+      </div>
+      <div class="menu-item" data-page="alerts" onclick="navigate('alerts')">
+        <span class="icon">&#128276;</span> 告警中心 Alerts
+      </div>
+      <div class="menu-item" data-page="objects" onclick="navigate('objects')">
+        <span class="icon">&#127959;</span> 对象管理 Objects
+      </div>
+      <div class="menu-item" data-page="indicators" onclick="navigate('indicators')">
+        <span class="icon">&#128202;</span> 指标库 Indicators
+      </div>
+      <div class="menu-item" data-page="rules" onclick="navigate('rules')">
+        <span class="icon">&#128208;</span> 规则库 Rules
+      </div>
+      <div class="menu-item" data-page="changes" onclick="navigate('changes')">
+        <span class="icon">&#128221;</span> 变更中心 Changes
+      </div>
+      <div class="menu-item" data-page="access" onclick="navigate('access')">
+        <span class="icon">&#128274;</span> 权限管理 Access
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="role-label">角色切换（原型演示）</span>
+      <div class="role-switcher">
+        <button class="role-btn active" onclick="switchRole('super_admin')">SuperAdmin</button>
+        <button class="role-btn" onclick="switchRole('admin')">Admin</button>
+        <button class="role-btn" onclick="switchRole('trader')">Trader</button>
+        <button class="role-btn" onclick="switchRole('viewer')">Viewer</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <header class="header">
+      <div class="header-left" id="pageTitle">总览</div>
+      <div class="header-right">
+        <span class="header-time" id="headerTime"></span>
+        <div class="user-badge">
+          <span id="roleIcon">&#128081;</span>
+          <span id="roleLabel">SuperAdmin</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- ==================== HOME ==================== -->
+      <div class="page active" id="page-home">
+        <!-- Row 1: Health + State + External -->
+        <div class="card-grid grid-3 section">
+          <div class="card health-big">
+            <div class="score" style="color: var(--success);">92<span class="max">/100</span></div>
+            <div class="label">系统内部健康度</div>
+            <div style="margin-top: 8px;">
+              <span class="state-badge state-healthy">&#9679; healthy 正常</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">今日告警统计</div>
+            <div class="card-grid grid-2" style="text-align: center;">
+              <div><span class="level-badge level-L3">L3</span><div style="font-size: 28px; font-weight: 700; margin-top: 4px;">0</div></div>
+              <div><span class="level-badge level-L2">L2</span><div style="font-size: 28px; font-weight: 700; margin-top: 4px;">2</div></div>
+              <div><span class="level-badge level-L1">L1</span><div style="font-size: 28px; font-weight: 700; margin-top: 4px;">5</div></div>
+              <div><span class="tag tag-orange" style="font-size: 12px;">待处理</span><div style="font-size: 28px; font-weight: 700; margin-top: 4px; color: var(--warning);">3</div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">外部依赖摘要</div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>API 频控消耗</span>
+                <span style="font-weight: 600; color: var(--success);">45% &#10003;</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>所有 symbol 可交易</span>
+                <span style="font-weight: 600; color: var(--success);">&#10003;</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>契约漂移</span>
+                <span style="font-weight: 600; color: var(--success);">无 &#10003;</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>交易所公告</span>
+                <span style="font-weight: 600; color: #8c8c8c;">无新公告</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 2: Five dimensions -->
+        <div class="card section">
+          <div class="card-title">五维健康分解</div>
+          <div class="card-grid grid-5" id="homeDimensions">
+            <!-- filled by JS -->
+          </div>
+        </div>
+
+        <!-- Row 3: Chain Status -->
+        <div class="card section">
+          <div class="card-title">关键链路状态</div>
+          <div class="chain" id="homeChain"></div>
+        </div>
+
+        <!-- Row 4: Risky objects + Recent alerts -->
+        <div class="card-grid grid-1-1 section">
+          <div class="card">
+            <div class="card-title">高风险对象 Top 5</div>
+            <table>
+              <thead><tr><th>对象</th><th>类型</th><th>风险分</th><th>触发规则</th></tr></thead>
+              <tbody>
+                <tr><td>币安合约账户-01</td><td><span class="tag tag-orange">Account</span></td><td style="font-weight:700; color: var(--warning);">62</td><td>E-001, P-003</td></tr>
+                <tr><td>mm-btc-binance-01</td><td><span class="tag tag-purple">Strategy</span></td><td style="font-weight:700; color: var(--warning);">71</td><td>M-001</td></tr>
+                <tr><td>PartnerA</td><td><span class="tag tag-blue">Team</span></td><td style="font-weight:700;">78</td><td>E-005</td></tr>
+                <tr><td>币安现货账户-PA01</td><td><span class="tag tag-orange">Account</span></td><td style="font-weight:700;">80</td><td>P-001</td></tr>
+                <tr><td>币安合约账户-03</td><td><span class="tag tag-orange">Account</span></td><td style="font-weight:700;">83</td><td>-</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <div class="card-title">最近告警事件</div>
+            <table>
+              <thead><tr><th>时间</th><th>级别</th><th>规则</th><th>对象</th></tr></thead>
+              <tbody>
+                <tr><td>14:23</td><td><span class="level-badge level-L2">L2</span></td><td>E-001 净Delta过高</td><td>币安合约账户-01</td></tr>
+                <tr><td>14:20</td><td><span class="level-badge level-L1">L1</span></td><td>S-014 Kafka积压</td><td>global</td></tr>
+                <tr><td>14:15</td><td><span class="level-badge level-L1">L1</span></td><td>M-001 波动率异常</td><td>mm-btc-binance-01</td></tr>
+                <tr><td>13:52</td><td><span class="level-badge level-L2">L2</span></td><td>P-003 盈亏偏离</td><td>币安合约账户-01</td></tr>
+                <tr><td>13:30</td><td><span class="level-badge level-L1">L1</span></td><td>E-005 盘口偏移</td><td>PartnerA</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== HEALTH ==================== -->
+      <div class="page" id="page-health">
+        <div class="tabs">
+          <div class="tab active" onclick="switchHealthTab(this, 'health-global')">全局面板</div>
+          <div class="tab" onclick="switchHealthTab(this, 'health-dims')">五维分解</div>
+          <div class="tab" onclick="switchHealthTab(this, 'health-rules')">健康规则</div>
+          <div class="tab" onclick="switchHealthTab(this, 'health-capacity')">容量与瓶颈</div>
+          <div class="tab" onclick="switchHealthTab(this, 'health-reports')">健康报告</div>
+        </div>
+
+        <!-- Tab: Global Panel -->
+        <div id="health-global">
+          <div class="card-grid grid-2 section">
+            <div class="card" style="text-align: center;">
+              <div class="score" style="font-size: 72px; font-weight: 700; color: var(--success);">92<span style="font-size: 24px; color: var(--text-secondary); font-weight: 400;">/100</span></div>
+              <div style="margin-top: 8px; font-size: 14px; color: var(--text-secondary);">内部健康度评分 (internal_health_score)</div>
+              <div style="margin-top: 12px;">
+                <span class="state-badge state-healthy">&#9679; healthy 系统正常</span>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title">外部依赖摘要 (external_dependency_summary)</div>
+              <div style="padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between;">
+                <span>API Rate Limit</span><span style="color: var(--success); font-weight: 500;">45% - 安全</span>
+              </div>
+              <div style="padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between;">
+                <span>所有 Symbol 可交易</span><span style="color: var(--success); font-weight: 500;">&#10003; 正常</span>
+              </div>
+              <div style="padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between;">
+                <span>合约参数漂移</span><span style="color: var(--success); font-weight: 500;">无漂移</span>
+              </div>
+              <div style="padding: 8px 0; display: flex; justify-content: space-between;">
+                <span>交易所维护公告</span><span style="color: #8c8c8c;">暂无</span>
+              </div>
+            </div>
+          </div>
+          <div class="card section">
+            <div class="card-title">最近 24h 健康度趋势</div>
+            <div style="height: 120px; display: flex; align-items: flex-end; gap: 2px; padding: 0 4px;" id="healthTrend"></div>
+          </div>
+        </div>
+
+        <!-- Tab: Five dimensions -->
+        <div id="health-dims" style="display:none;">
+          <div class="card-grid grid-1-1 section" id="healthDimDetail"></div>
+        </div>
+
+        <!-- Tab: Health rules -->
+        <div id="health-rules" style="display:none;">
+          <div class="card section">
+            <div class="card-title">健康治理规则实时状态</div>
+            <table>
+              <thead><tr><th>规则</th><th>名称</th><th>状态</th><th>最近评估</th><th>最近触发</th><th>当前值</th></tr></thead>
+              <tbody>
+                <tr><td>S-004</td><td>数据盲区检测</td><td><span class="tag tag-green">&#10003; 正常</span></td><td>14:30:05</td><td>昨天 22:15</td><td>fresh=99.2%</td></tr>
+                <tr><td>S-009</td><td>Watchdog 看门狗</td><td><span class="tag tag-green">&#10003; 正常</span></td><td>14:30:02</td><td>3天前</td><td>heartbeat=1.2s</td></tr>
+                <tr><td>S-014</td><td>Kafka 消息积压</td><td><span class="tag tag-orange">&#9888; 告警中</span></td><td>14:30:05</td><td>14:20</td><td>lag=1,250</td></tr>
+                <tr><td>S-015</td><td>中间件+应用资源</td><td><span class="tag tag-green">&#10003; 正常</span></td><td>14:30:00</td><td>昨天 08:33</td><td>redis=62%</td></tr>
+                <tr><td>S-016</td><td>指标静默检测</td><td><span class="tag tag-green">&#10003; 正常</span></td><td>14:30:05</td><td>2天前</td><td>silent=0</td></tr>
+                <tr><td>S-017</td><td>健康度评分</td><td><span class="tag tag-green">&#10003; 正常</span></td><td>14:30:00</td><td>今天 08:00</td><td>score=92</td></tr>
+                <tr><td>S-018</td><td>Canary 告警探针</td><td><span class="tag tag-green">&#10003; 正常</span></td><td>14:15:00</td><td>从未</td><td>rt=1.8s</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tab: Capacity -->
+        <div id="health-capacity" style="display:none;">
+          <div class="card-grid grid-2 section">
+            <div class="card">
+              <div class="card-title">Kafka Consumer Lag</div>
+              <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;">
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 12px;"><span>risk-events (高优)</span><span style="color: var(--warning); font-weight: 600;">1,250</span></div>
+                  <div class="progress-ring"><div class="progress-ring-fill" style="width: 62%; background: var(--warning);"></div></div>
+                </div>
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 12px;"><span>market-data</span><span>120</span></div>
+                  <div class="progress-ring"><div class="progress-ring-fill" style="width: 12%; background: var(--success);"></div></div>
+                </div>
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 12px;"><span>order-events</span><span>45</span></div>
+                  <div class="progress-ring"><div class="progress-ring-fill" style="width: 5%; background: var(--success);"></div></div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title">Redis</div>
+              <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;">
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 12px;"><span>Memory Usage</span><span>62%</span></div>
+                  <div class="progress-ring"><div class="progress-ring-fill" style="width: 62%; background: var(--primary);"></div></div>
+                </div>
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 12px;"><span>OPS/sec</span><span>12,500</span></div>
+                  <div class="progress-ring"><div class="progress-ring-fill" style="width: 42%; background: var(--success);"></div></div>
+                </div>
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 12px;"><span>Evicted Keys (24h)</span><span style="color: var(--success);">0</span></div>
+                  <div class="progress-ring"><div class="progress-ring-fill" style="width: 0%; background: var(--success);"></div></div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title">MySQL</div>
+              <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;">
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 12px;"><span>Connection Pool</span><span>38%</span></div>
+                  <div class="progress-ring"><div class="progress-ring-fill" style="width: 38%; background: var(--success);"></div></div>
+                </div>
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 12px;"><span>Slow Queries (1h)</span><span>2</span></div>
+                  <div class="progress-ring"><div class="progress-ring-fill" style="width: 5%; background: var(--success);"></div></div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title">Service Resources</div>
+              <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;">
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 12px;"><span>rule-engine CPU</span><span>35%</span></div>
+                  <div class="progress-ring"><div class="progress-ring-fill" style="width: 35%; background: var(--success);"></div></div>
+                </div>
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 12px;"><span>rule-engine Memory</span><span>58%</span></div>
+                  <div class="progress-ring"><div class="progress-ring-fill" style="width: 58%; background: var(--primary);"></div></div>
+                </div>
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 12px;"><span>notifier CPU</span><span>12%</span></div>
+                  <div class="progress-ring"><div class="progress-ring-fill" style="width: 12%; background: var(--success);"></div></div>
+                </div>
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 12px;"><span>Canary Roundtrip</span><span>1.8s</span></div>
+                  <div class="progress-ring"><div class="progress-ring-fill" style="width: 18%; background: var(--success);"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Reports -->
+        <div id="health-reports" style="display:none;">
+          <div class="card section">
+            <div class="card-title">健康报告列表</div>
+            <table>
+              <thead><tr><th>时间</th><th>类型</th><th>健康度</th><th>状态</th><th>关键发现</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>2026-04-02 08:00</td><td><span class="tag tag-blue">定时报告</span></td><td style="font-weight:700;">92</td><td><span class="state-badge state-healthy" style="font-size:12px;padding:2px 8px;">healthy</span></td><td>Kafka lag 轻微上升</td><td><button class="btn btn-sm">查看详情</button></td></tr>
+                <tr><td>2026-04-01 20:00</td><td><span class="tag tag-blue">定时报告</span></td><td style="font-weight:700;">95</td><td><span class="state-badge state-healthy" style="font-size:12px;padding:2px 8px;">healthy</span></td><td>全部正常</td><td><button class="btn btn-sm">查看详情</button></td></tr>
+                <tr><td>2026-04-01 14:33</td><td><span class="tag tag-orange">状态切换</span></td><td style="font-weight:700;">68</td><td><span class="state-badge state-degraded" style="font-size:12px;padding:2px 8px;">internal_degraded</span></td><td>Redis OOM告警 + 多指标静默</td><td><button class="btn btn-sm">查看详情</button></td></tr>
+                <tr><td>2026-04-01 14:45</td><td><span class="tag tag-green">恢复报告</span></td><td style="font-weight:700;">88</td><td><span class="state-badge state-healthy" style="font-size:12px;padding:2px 8px;">healthy</span></td><td>Redis 恢复，健康度回升</td><td><button class="btn btn-sm">查看详情</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card section">
+            <div class="card-title">Canary 探针时间线</div>
+            <table>
+              <thead><tr><th>探测时间</th><th>结果</th><th>往返耗时</th><th>消息ID</th></tr></thead>
+              <tbody>
+                <tr><td>14:15:00</td><td><span class="tag tag-green">&#10003; 成功</span></td><td>1.8s</td><td>canary-20260402-141500</td></tr>
+                <tr><td>14:00:00</td><td><span class="tag tag-green">&#10003; 成功</span></td><td>2.1s</td><td>canary-20260402-140000</td></tr>
+                <tr><td>13:45:00</td><td><span class="tag tag-green">&#10003; 成功</span></td><td>1.5s</td><td>canary-20260402-134500</td></tr>
+                <tr><td>13:30:00</td><td><span class="tag tag-green">&#10003; 成功</span></td><td>1.9s</td><td>canary-20260402-133000</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== ALERTS ==================== -->
+      <div class="page" id="page-alerts">
+        <div class="filter-bar">
+          <select><option>全部级别</option><option>L3 紧急</option><option>L2 警告</option><option>L1 提示</option></select>
+          <select><option>全部状态</option><option>open</option><option>ack</option><option>handling</option><option>resolved</option></select>
+          <select><option>全部类别</option><option>S-系统</option><option>E-敞口</option><option>M-市场</option><option>P-盈亏</option></select>
+          <input type="text" placeholder="搜索规则/对象..." style="width: 180px;">
+          <input type="date" value="2026-04-02">
+          <span style="line-height: 32px;">至</span>
+          <input type="date" value="2026-04-02">
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>时间</th><th>级别</th><th>规则</th><th>对象</th><th>状态</th><th>处理人</th><th class="perm-edit">操作</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>14:23:15</td>
+                <td><span class="level-badge level-L2">L2</span></td>
+                <td>E-001 净Delta过高</td>
+                <td>币安合约账户-01</td>
+                <td><span class="tag tag-red">open</span></td>
+                <td>-</td>
+                <td class="perm-edit"><button class="btn btn-sm btn-primary" onclick="showToast('已确认告警 E-001')">确认</button> <button class="btn btn-sm">处理</button></td>
+              </tr>
+              <tr>
+                <td>14:20:03</td>
+                <td><span class="level-badge level-L1">L1</span></td>
+                <td>S-014 Kafka积压</td>
+                <td>global</td>
+                <td><span class="tag tag-red">open</span></td>
+                <td>-</td>
+                <td class="perm-edit"><button class="btn btn-sm btn-primary" onclick="showToast('已确认告警 S-014')">确认</button> <button class="btn btn-sm">处理</button></td>
+              </tr>
+              <tr>
+                <td>14:15:22</td>
+                <td><span class="level-badge level-L1">L1</span></td>
+                <td>M-001 波动率异常</td>
+                <td>mm-btc-binance-01</td>
+                <td><span class="tag tag-orange">ack</span></td>
+                <td>trader-a</td>
+                <td class="perm-edit"><button class="btn btn-sm">处理</button></td>
+              </tr>
+              <tr>
+                <td>13:52:08</td>
+                <td><span class="level-badge level-L2">L2</span></td>
+                <td>P-003 盈亏偏离</td>
+                <td>币安合约账户-01</td>
+                <td><span class="tag tag-blue">handling</span></td>
+                <td>admin-a</td>
+                <td class="perm-edit"><button class="btn btn-sm" onclick="showToast('已关闭告警 P-003')">关闭</button> <button class="btn btn-sm">误报</button></td>
+              </tr>
+              <tr>
+                <td>13:30:45</td>
+                <td><span class="level-badge level-L1">L1</span></td>
+                <td>E-005 盘口偏移</td>
+                <td>PartnerA</td>
+                <td><span class="tag tag-green">resolved</span></td>
+                <td>admin-b</td>
+                <td class="perm-edit">-</td>
+              </tr>
+              <tr>
+                <td>12:10:33</td>
+                <td><span class="level-badge level-L1">L1</span></td>
+                <td>S-015 Redis内存</td>
+                <td>global</td>
+                <td><span class="tag tag-green">resolved</span></td>
+                <td>sa</td>
+                <td class="perm-edit">-</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ==================== OBJECTS ==================== -->
+      <div class="page" id="page-objects">
+        <div class="card-grid" style="grid-template-columns: 280px 1fr; gap: 16px;">
+          <!-- Left: tree -->
+          <div class="card" style="padding: 12px;">
+            <div class="card-title" style="font-size: 13px;">治理对象树</div>
+            <div class="tree" id="objectTree">
+              <!-- filled by JS -->
+            </div>
+          </div>
+          <!-- Right: detail -->
+          <div class="card">
+            <div class="card-title" id="objDetailTitle">&#128273; 币安合约账户-01 <span class="subtitle">Account &middot; BTC做市项目-币安 / 内部量化组 / mm-btc-binance-01</span></div>
+            <div class="tabs" id="objTabs">
+              <div class="tab active" onclick="switchObjTab(this, 'obj-overview')">概览</div>
+              <div class="tab" onclick="switchObjTab(this, 'obj-rules')">生效规则</div>
+              <div class="tab" onclick="switchObjTab(this, 'obj-indicators')">指标状态</div>
+              <div class="tab" onclick="switchObjTab(this, 'obj-alerts')">告警历史</div>
+              <div class="tab" onclick="switchObjTab(this, 'obj-changes')">配置变更</div>
+            </div>
+
+            <div id="obj-overview">
+              <div class="card-grid grid-4" style="margin-bottom: 16px;">
+                <div class="stat-card"><div class="stat-value">62</div><div class="stat-label">风险评分</div></div>
+                <div class="stat-card"><div class="stat-value" style="color: var(--success);">42</div><div class="stat-label">生效规则</div></div>
+                <div class="stat-card"><div class="stat-value">2</div><div class="stat-label">活跃告警</div></div>
+                <div class="stat-card"><div class="stat-value">5</div><div class="stat-label">今日事件</div></div>
+              </div>
+              <table>
+                <thead><tr><th>属性</th><th>值</th></tr></thead>
+                <tbody>
+                  <tr><td>账户ID</td><td>acc-binance-futures-01</td></tr>
+                  <tr><td>交易所</td><td>Binance</td></tr>
+                  <tr><td>账户类型</td><td>Futures</td></tr>
+                  <tr><td>所属策略</td><td>mm-btc-binance-01</td></tr>
+                  <tr><td>所属团队</td><td>内部量化组</td></tr>
+                  <tr><td>所属项目</td><td>BTC做市项目-币安</td></tr>
+                  <tr><td>状态</td><td><span class="tag tag-green">active</span></td></tr>
+                  <tr><td>创建时间</td><td>2026-01-15</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div id="obj-rules" style="display:none;">
+              <div style="margin-bottom: 12px; display: flex; gap: 8px; align-items: center;">
+                <span style="font-size: 13px;">共 42 条生效规则</span>
+                <select style="padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px;">
+                  <option>全部来源</option><option>Global</option><option>Project</option><option>Team</option><option>Strategy</option><option>Account</option>
+                </select>
+                <select style="padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px;">
+                  <option>全部类别</option><option>S-系统</option><option>E-敞口</option><option>M-市场</option><option>P-盈亏</option>
+                </select>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>规则</th><th>名称</th><th>状态</th><th>来源</th><th>关键阈值</th><th>动作</th><th>最近命中</th></tr></thead>
+                  <tbody>
+                    <tr><td>P-001</td><td>净头寸硬限</td><td><span class="tag tag-green">&#10003; 启用</span></td><td><span class="source source-global">Global</span></td><td>默认</td><td>R0</td><td>从未</td></tr>
+                    <tr><td>E-001</td><td>净Delta过高</td><td><span class="tag tag-green">&#10003; 启用</span></td><td><span class="source source-team">Team&#8595;</span></td><td>delta&#8804;8</td><td>R2</td><td style="color: var(--warning);">14:23</td></tr>
+                    <tr><td>E-002</td><td>Gamma集中度</td><td><span class="tag tag-green">&#10003; 启用</span></td><td><span class="source source-account">Account&#8595;</span></td><td>自定义</td><td>R1</td><td>昨天</td></tr>
+                    <tr><td>M-001</td><td>波动率异常</td><td><span class="tag tag-red">&#10007; 已关闭</span></td><td><span class="source source-disabled">Team&#10007;</span></td><td>-</td><td>-</td><td>-</td></tr>
+                    <tr><td>S-001</td><td>WS连接中断</td><td><span class="tag tag-green">&#10003; 启用</span></td><td><span class="source source-global">Global</span></td><td>默认</td><td>R2</td><td>3天前</td></tr>
+                    <tr><td>S-014</td><td>Kafka积压</td><td><span class="tag tag-green">&#10003; 启用</span></td><td><span class="source source-global">Global</span></td><td>lag>100</td><td>L1</td><td style="color: var(--warning);">14:20</td></tr>
+                    <tr><td>S-017</td><td>健康度评分</td><td><span class="tag tag-green">&#10003; 启用</span></td><td><span class="source source-global">Global</span></td><td>score&lt;70</td><td>L2</td><td>昨天</td></tr>
+                    <tr><td>P-003</td><td>盈亏偏离</td><td><span class="tag tag-green">&#10003; 启用</span></td><td><span class="source source-project">Project</span></td><td>pnl_dev>5%</td><td>R2</td><td style="color: var(--warning);">13:52</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="obj-indicators" style="display:none;">
+              <table>
+                <thead><tr><th>指标</th><th>名称</th><th>当前值</th><th>更新时间</th><th>年龄</th><th>状态</th></tr></thead>
+                <tbody>
+                  <tr><td>IND-E-001</td><td>net_delta</td><td style="font-weight:700; color: var(--warning);">7.8 BTC</td><td>14:30:02</td><td>0.5s</td><td><span class="status-dot status-ok"></span></td></tr>
+                  <tr><td>IND-E-002</td><td>gamma_concentration</td><td>0.32</td><td>14:30:01</td><td>1.2s</td><td><span class="status-dot status-ok"></span></td></tr>
+                  <tr><td>IND-P-001</td><td>net_position_notional</td><td>$125,000</td><td>14:30:02</td><td>0.5s</td><td><span class="status-dot status-ok"></span></td></tr>
+                  <tr><td>IND-P-003</td><td>pnl_deviation</td><td style="font-weight:700; color: var(--warning);">4.2%</td><td>14:30:00</td><td>2.5s</td><td><span class="status-dot status-ok"></span></td></tr>
+                  <tr><td>IND-S-001</td><td>ws_public_connected</td><td>true</td><td>14:30:05</td><td>0.1s</td><td><span class="status-dot status-ok"></span></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div id="obj-alerts" style="display:none;">
+              <table>
+                <thead><tr><th>时间</th><th>级别</th><th>规则</th><th>状态</th><th>详情</th></tr></thead>
+                <tbody>
+                  <tr><td>14:23:15</td><td><span class="level-badge level-L2">L2</span></td><td>E-001 净Delta过高</td><td><span class="tag tag-red">open</span></td><td>delta=7.8 > threshold=8</td></tr>
+                  <tr><td>13:52:08</td><td><span class="level-badge level-L2">L2</span></td><td>P-003 盈亏偏离</td><td><span class="tag tag-blue">handling</span></td><td>pnl_dev=5.1% > 5%</td></tr>
+                  <tr><td>昨天 22:15</td><td><span class="level-badge level-L1">L1</span></td><td>S-004 数据盲区</td><td><span class="tag tag-green">resolved</span></td><td>stale_ratio=12% > 10%</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div id="obj-changes" style="display:none;">
+              <table>
+                <thead><tr><th>时间</th><th>类型</th><th>内容</th><th>操作人</th><th>状态</th></tr></thead>
+                <tbody>
+                  <tr><td>2026-04-01 16:00</td><td><span class="tag tag-blue">规则绑定</span></td><td>E-002 阈值覆盖 gamma>0.5</td><td>trader-a</td><td><span class="tag tag-green">published</span></td></tr>
+                  <tr><td>2026-03-28 10:30</td><td><span class="tag tag-blue">规则绑定</span></td><td>M-001 显式关闭</td><td>admin-a</td><td><span class="tag tag-green">published</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== INDICATORS ==================== -->
+      <div class="page" id="page-indicators">
+        <div class="tabs">
+          <div class="tab active" onclick="switchIndTab(this, 'ind-catalog')">指标目录</div>
+          <div class="tab" onclick="switchIndTab(this, 'ind-runtime')">运行态</div>
+          <div class="tab perm-admin" onclick="switchIndTab(this, 'ind-config')">指标配置</div>
+          <div class="tab" onclick="switchIndTab(this, 'ind-deps')">依赖图</div>
+        </div>
+
+        <div id="ind-catalog">
+          <div class="filter-bar">
+            <select><option>全部类别</option><option>S-系统</option><option>E-敞口</option><option>M-市场</option><option>P-盈亏</option><option>B-余额</option><option>BASE</option></select>
+            <select><option>全部层级</option><option>L0</option><option>L1</option><option>L2</option><option>L3</option></select>
+            <select><option>全部类型</option><option>A-连续</option><option>B-开关</option><option>C-计数</option><option>D-派生</option></select>
+            <select><option>全部状态</option><option>正常</option><option>静默</option><option>错误</option><option>禁用</option></select>
+            <input type="text" placeholder="搜索指标ID/名称..." style="width: 200px;">
+          </div>
+          <div class="card">
+            <div class="card-title">指标目录 <span class="subtitle">共 85 个指标</span></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>指标ID</th><th>名称</th><th>类别</th><th>层级</th><th>类型</th><th>粒度</th><th>频率</th><th>消费规则</th><th>状态</th></tr></thead>
+                <tbody>
+                  <tr><td>IND-S-001</td><td>ws_public_connected</td><td><span class="tag tag-gray">S-系统</span></td><td>L0</td><td>B</td><td>exchange</td><td>5s</td><td><a href="#" onclick="navigate('rules');return false;">S-001</a></td><td><span class="status-dot status-ok"></span> 正常</td></tr>
+                  <tr><td>IND-S-002</td><td>ws_private_connected</td><td><span class="tag tag-gray">S-系统</span></td><td>L0</td><td>B</td><td>exchange+account</td><td>5s</td><td><a href="#" onclick="navigate('rules');return false;">S-002</a></td><td><span class="status-dot status-ok"></span> 正常</td></tr>
+                  <tr><td>IND-S-014</td><td>kafka_consumer_lag</td><td><span class="tag tag-gray">S-系统</span></td><td>L0</td><td>A</td><td>consumer_group+topic</td><td>5s</td><td><a href="#" onclick="navigate('rules');return false;">S-014, S-017</a></td><td><span class="status-dot status-warn"></span> 告警</td></tr>
+                  <tr><td>IND-S-015</td><td>redis_memory_usage_pct</td><td><span class="tag tag-gray">S-系统</span></td><td>L1</td><td>A</td><td>global</td><td>30s</td><td><a href="#" onclick="navigate('rules');return false;">S-015, S-017</a></td><td><span class="status-dot status-ok"></span> 正常</td></tr>
+                  <tr><td>IND-S-017</td><td>internal_health_score &#128310;</td><td><span class="tag tag-gray">S-系统</span></td><td>L3</td><td>D</td><td>global</td><td>60s</td><td><a href="#" onclick="navigate('rules');return false;">S-017</a></td><td><span class="status-dot status-ok"></span> 正常</td></tr>
+                  <tr><td>IND-S-018</td><td>canary_alert_success</td><td><span class="tag tag-gray">S-系统</span></td><td>L2</td><td>B</td><td>global</td><td>15min</td><td><a href="#" onclick="navigate('rules');return false;">S-018, S-017</a></td><td><span class="status-dot status-ok"></span> 正常</td></tr>
+                  <tr><td>IND-E-001</td><td>net_delta</td><td><span class="tag tag-blue">E-敞口</span></td><td>L0</td><td>A</td><td>exchange+symbol+account</td><td>1s</td><td><a href="#" onclick="navigate('rules');return false;">E-001</a></td><td><span class="status-dot status-ok"></span> 正常</td></tr>
+                  <tr><td>IND-M-001</td><td>realized_vol</td><td><span class="tag tag-purple">M-市场</span></td><td>L1</td><td>A</td><td>exchange+symbol</td><td>5s</td><td><a href="#" onclick="navigate('rules');return false;">M-001</a></td><td><span class="status-dot status-ok"></span> 正常</td></tr>
+                  <tr><td>IND-P-001</td><td>net_position_notional</td><td><span class="tag tag-orange">P-盈亏</span></td><td>L0</td><td>A</td><td>exchange+account</td><td>1s</td><td><a href="#" onclick="navigate('rules');return false;">P-001</a></td><td><span class="status-dot status-ok"></span> 正常</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="ind-runtime" style="display:none;">
+          <div class="card">
+            <div class="card-title">指标运行态监控</div>
+            <table>
+              <thead><tr><th>指标ID</th><th>名称</th><th>最近更新</th><th>年龄</th><th>覆盖率</th><th>P99耗时</th><th>异常率</th><th>最近错误</th></tr></thead>
+              <tbody>
+                <tr><td>IND-S-001</td><td>ws_public_connected</td><td>14:30:05</td><td>0.1s</td><td>100%</td><td>2ms</td><td>0%</td><td>-</td></tr>
+                <tr><td>IND-S-014</td><td>kafka_consumer_lag</td><td>14:30:05</td><td>0.2s</td><td>100%</td><td>8ms</td><td>0%</td><td>-</td></tr>
+                <tr><td>IND-S-017</td><td>internal_health_score</td><td>14:30:00</td><td>5.2s</td><td>100%</td><td>45ms</td><td>0%</td><td>-</td></tr>
+                <tr><td>IND-E-001</td><td>net_delta</td><td>14:30:02</td><td>0.5s</td><td>98%</td><td>12ms</td><td>0.1%</td><td style="color: var(--warning);">timeout on BTC-USDT-241227</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="ind-config" style="display:none;">
+          <div class="card">
+            <div class="card-title">指标运行参数配置 <span class="subtitle">仅开放运行参数，不允许改数学定义</span></div>
+            <table>
+              <thead><tr><th>指标ID</th><th>名称</th><th>启用</th><th>更新频率</th><th>Freshness SLA</th><th>静默阈值</th><th>优先级</th><th>纳入健康度</th><th class="perm-admin">操作</th></tr></thead>
+              <tbody>
+                <tr><td>IND-S-014</td><td>kafka_consumer_lag</td><td><span class="tag tag-green">&#10003;</span></td><td>5s</td><td>10s</td><td>30s</td><td>high</td><td>&#10003;</td><td class="perm-admin"><button class="btn btn-sm" onclick="showToast('打开指标配置编辑 (原型演示)')">编辑</button></td></tr>
+                <tr><td>IND-S-015</td><td>redis_memory_usage_pct</td><td><span class="tag tag-green">&#10003;</span></td><td>30s</td><td>60s</td><td>120s</td><td>medium</td><td>&#10003;</td><td class="perm-admin"><button class="btn btn-sm" onclick="showToast('打开指标配置编辑 (原型演示)')">编辑</button></td></tr>
+                <tr><td>IND-S-017</td><td>internal_health_score</td><td><span class="tag tag-green">&#10003;</span></td><td>60s</td><td>120s</td><td>300s</td><td>high</td><td>&#10003;</td><td class="perm-admin"><button class="btn btn-sm" onclick="showToast('打开指标配置编辑 (原型演示)')">编辑</button></td></tr>
+                <tr><td>IND-E-001</td><td>net_delta</td><td><span class="tag tag-green">&#10003;</span></td><td>1s</td><td>3s</td><td>10s</td><td>high</td><td>&#10007;</td><td class="perm-admin"><button class="btn btn-sm" onclick="showToast('打开指标配置编辑 (原型演示)')">编辑</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="ind-deps" style="display:none;">
+          <div class="card">
+            <div class="card-title">指标依赖关系图 <span class="subtitle">点击节点查看详情（原型示意）</span></div>
+            <div style="padding: 20px; text-align: center;">
+              <svg width="720" height="320" viewBox="0 0 720 320" style="max-width: 100%;">
+                <!-- Data sources -->
+                <rect x="10" y="60" width="100" height="36" rx="6" fill="#f0f5ff" stroke="#1677ff"/>
+                <text x="60" y="83" text-anchor="middle" font-size="11" fill="#1677ff">交易所 WS</text>
+                <rect x="10" y="130" width="100" height="36" rx="6" fill="#f0f5ff" stroke="#1677ff"/>
+                <text x="60" y="153" text-anchor="middle" font-size="11" fill="#1677ff">Kafka</text>
+                <rect x="10" y="200" width="100" height="36" rx="6" fill="#f0f5ff" stroke="#1677ff"/>
+                <text x="60" y="223" text-anchor="middle" font-size="11" fill="#1677ff">Redis/MySQL</text>
+                <rect x="10" y="270" width="100" height="36" rx="6" fill="#f0f5ff" stroke="#1677ff"/>
+                <text x="60" y="293" text-anchor="middle" font-size="11" fill="#1677ff">Telegram API</text>
+                <!-- Indicators -->
+                <rect x="200" y="20" width="120" height="30" rx="6" fill="#e6f4ff" stroke="#91caff"/>
+                <text x="260" y="40" text-anchor="middle" font-size="10" fill="#1677ff">IND-S-001 WS公共</text>
+                <rect x="200" y="60" width="120" height="30" rx="6" fill="#e6f4ff" stroke="#91caff"/>
+                <text x="260" y="80" text-anchor="middle" font-size="10" fill="#1677ff">IND-S-002 WS私有</text>
+                <rect x="200" y="100" width="120" height="30" rx="6" fill="#fff7e6" stroke="#ffd591"/>
+                <text x="260" y="120" text-anchor="middle" font-size="10" fill="#fa8c16">IND-S-014 Kafka lag</text>
+                <rect x="200" y="140" width="120" height="30" rx="6" fill="#e6f4ff" stroke="#91caff"/>
+                <text x="260" y="160" text-anchor="middle" font-size="10" fill="#1677ff">IND-S-015 Redis</text>
+                <rect x="200" y="180" width="120" height="30" rx="6" fill="#e6f4ff" stroke="#91caff"/>
+                <text x="260" y="200" text-anchor="middle" font-size="10" fill="#1677ff">IND-S-016 静默</text>
+                <rect x="200" y="220" width="120" height="30" rx="6" fill="#e6f4ff" stroke="#91caff"/>
+                <text x="260" y="240" text-anchor="middle" font-size="10" fill="#1677ff">IND-S-018 Canary</text>
+                <rect x="200" y="270" width="130" height="30" rx="6" fill="#f9f0ff" stroke="#d3adf7"/>
+                <text x="265" y="290" text-anchor="middle" font-size="10" fill="#722ed1">IND-S-017 健康度 &#128310;</text>
+                <!-- Rules -->
+                <rect x="430" y="20" width="100" height="30" rx="6" fill="#f6ffed" stroke="#b7eb8f"/>
+                <text x="480" y="40" text-anchor="middle" font-size="10" fill="#52c41a">S-001</text>
+                <rect x="430" y="60" width="100" height="30" rx="6" fill="#f6ffed" stroke="#b7eb8f"/>
+                <text x="480" y="80" text-anchor="middle" font-size="10" fill="#52c41a">S-002</text>
+                <rect x="430" y="100" width="100" height="30" rx="6" fill="#fff7e6" stroke="#ffd591"/>
+                <text x="480" y="120" text-anchor="middle" font-size="10" fill="#fa8c16">S-014</text>
+                <rect x="430" y="140" width="100" height="30" rx="6" fill="#f6ffed" stroke="#b7eb8f"/>
+                <text x="480" y="160" text-anchor="middle" font-size="10" fill="#52c41a">S-015</text>
+                <rect x="430" y="180" width="100" height="30" rx="6" fill="#f6ffed" stroke="#b7eb8f"/>
+                <text x="480" y="200" text-anchor="middle" font-size="10" fill="#52c41a">S-016</text>
+                <rect x="430" y="220" width="100" height="30" rx="6" fill="#f6ffed" stroke="#b7eb8f"/>
+                <text x="480" y="240" text-anchor="middle" font-size="10" fill="#52c41a">S-018</text>
+                <rect x="430" y="270" width="100" height="30" rx="6" fill="#f6ffed" stroke="#b7eb8f"/>
+                <text x="480" y="290" text-anchor="middle" font-size="10" fill="#52c41a">S-017</text>
+                <!-- Output -->
+                <rect x="620" y="80" width="90" height="30" rx="6" fill="#fff2f0" stroke="#ffccc7"/>
+                <text x="665" y="100" text-anchor="middle" font-size="10" fill="#ff4d4f">risk_event</text>
+                <rect x="620" y="130" width="90" height="30" rx="6" fill="#fff2f0" stroke="#ffccc7"/>
+                <text x="665" y="150" text-anchor="middle" font-size="10" fill="#ff4d4f">control_action</text>
+                <rect x="620" y="260" width="90" height="30" rx="6" fill="#f9f0ff" stroke="#d3adf7"/>
+                <text x="665" y="280" text-anchor="middle" font-size="10" fill="#722ed1">health_report</text>
+                <!-- Arrows (simplified) -->
+                <line x1="110" y1="78" x2="200" y2="35" stroke="#bbb" stroke-width="1" marker-end="url(#arrow)"/>
+                <line x1="110" y1="78" x2="200" y2="75" stroke="#bbb" stroke-width="1" marker-end="url(#arrow)"/>
+                <line x1="110" y1="148" x2="200" y2="115" stroke="#bbb" stroke-width="1" marker-end="url(#arrow)"/>
+                <line x1="110" y1="218" x2="200" y2="155" stroke="#bbb" stroke-width="1" marker-end="url(#arrow)"/>
+                <line x1="110" y1="218" x2="200" y2="195" stroke="#bbb" stroke-width="1" marker-end="url(#arrow)"/>
+                <line x1="110" y1="288" x2="200" y2="235" stroke="#bbb" stroke-width="1" marker-end="url(#arrow)"/>
+                <!-- Indicators to Rules -->
+                <line x1="320" y1="35" x2="430" y2="35" stroke="#91caff" stroke-width="1.5" marker-end="url(#arrow2)"/>
+                <line x1="320" y1="75" x2="430" y2="75" stroke="#91caff" stroke-width="1.5" marker-end="url(#arrow2)"/>
+                <line x1="320" y1="115" x2="430" y2="115" stroke="#ffd591" stroke-width="1.5" marker-end="url(#arrow2)"/>
+                <line x1="320" y1="155" x2="430" y2="155" stroke="#91caff" stroke-width="1.5" marker-end="url(#arrow2)"/>
+                <line x1="320" y1="195" x2="430" y2="195" stroke="#91caff" stroke-width="1.5" marker-end="url(#arrow2)"/>
+                <line x1="320" y1="235" x2="430" y2="235" stroke="#91caff" stroke-width="1.5" marker-end="url(#arrow2)"/>
+                <!-- Multiple indicators to S-017 -->
+                <line x1="320" y1="115" x2="430" y2="285" stroke="#d3adf7" stroke-width="1" stroke-dasharray="4" marker-end="url(#arrow3)"/>
+                <line x1="320" y1="155" x2="430" y2="285" stroke="#d3adf7" stroke-width="1" stroke-dasharray="4" marker-end="url(#arrow3)"/>
+                <line x1="320" y1="195" x2="430" y2="285" stroke="#d3adf7" stroke-width="1" stroke-dasharray="4" marker-end="url(#arrow3)"/>
+                <line x1="320" y1="235" x2="430" y2="285" stroke="#d3adf7" stroke-width="1" stroke-dasharray="4" marker-end="url(#arrow3)"/>
+                <!-- Rules to Output -->
+                <line x1="530" y1="35" x2="620" y2="95" stroke="#b7eb8f" stroke-width="1" marker-end="url(#arrow4)"/>
+                <line x1="530" y1="75" x2="620" y2="95" stroke="#b7eb8f" stroke-width="1" marker-end="url(#arrow4)"/>
+                <line x1="530" y1="115" x2="620" y2="95" stroke="#b7eb8f" stroke-width="1" marker-end="url(#arrow4)"/>
+                <line x1="530" y1="155" x2="620" y2="95" stroke="#b7eb8f" stroke-width="1" marker-end="url(#arrow4)"/>
+                <line x1="530" y1="195" x2="620" y2="95" stroke="#b7eb8f" stroke-width="1" marker-end="url(#arrow4)"/>
+                <line x1="530" y1="235" x2="620" y2="95" stroke="#b7eb8f" stroke-width="1" marker-end="url(#arrow4)"/>
+                <line x1="530" y1="285" x2="620" y2="275" stroke="#d3adf7" stroke-width="1.5" marker-end="url(#arrow3)"/>
+                <!-- Arrow defs -->
+                <defs>
+                  <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#bbb"/></marker>
+                  <marker id="arrow2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#91caff"/></marker>
+                  <marker id="arrow3" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#d3adf7"/></marker>
+                  <marker id="arrow4" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#b7eb8f"/></marker>
+                </defs>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== RULES ==================== -->
+      <div class="page" id="page-rules">
+        <div class="tabs">
+          <div class="tab active" onclick="switchRuleTab(this, 'rule-templates')">规则模板</div>
+          <div class="tab" onclick="switchRuleTab(this, 'rule-binding-view')">规则视图</div>
+          <div class="tab" onclick="switchRuleTab(this, 'rule-object-view')">对象视图</div>
+          <div class="tab" onclick="switchRuleTab(this, 'rule-diff-view')">差异视图</div>
+        </div>
+
+        <!-- Rule Templates -->
+        <div id="rule-templates">
+          <div class="filter-bar">
+            <select><option>全部类别</option><option>S-系统(18)</option><option>E-敞口</option><option>M-市场</option><option>P-盈亏</option><option>B-余额</option><option>L-限额</option></select>
+            <select><option>全部优先级</option><option>P0</option><option>P1</option><option>P2</option><option>P3</option></select>
+            <select><option>全部状态</option><option>启用</option><option>禁用</option></select>
+            <input type="text" placeholder="搜索规则编号/名称..." style="width: 200px;">
+            <div style="flex:1;"></div>
+            <button class="btn perm-sa" onclick="showToast('创建新规则模板 (SuperAdmin only)')">+ 新增模板</button>
+          </div>
+          <div class="card">
+            <div class="card-title">规则模板库 <span class="subtitle">共 82 条规则（平台维护的标准定义）</span></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>编号</th><th>名称</th><th>类别</th><th>优先级</th><th>默认阈值</th><th>动作</th><th>时间策略</th><th>消费指标</th><th>状态</th><th class="perm-sa">操作</th></tr></thead>
+                <tbody>
+                  <tr><td>S-001</td><td>公共WS连接中断</td><td><span class="tag tag-gray">S-系统</span></td><td>P0</td><td>connected=false</td><td>R2</td><td>F1, 1s</td><td>IND-S-001</td><td><span class="tag tag-green">&#10003;</span></td><td class="perm-sa"><button class="btn btn-sm">编辑</button></td></tr>
+                  <tr><td>S-014</td><td>Kafka消息积压</td><td><span class="tag tag-gray">S-系统</span></td><td>P1</td><td>lag>100(高优)/500(低优)</td><td>L1/L2</td><td>F1, 5s</td><td>IND-S-014</td><td><span class="tag tag-green">&#10003;</span></td><td class="perm-sa"><button class="btn btn-sm">编辑</button></td></tr>
+                  <tr><td>S-015</td><td>中间件+应用资源</td><td><span class="tag tag-gray">S-系统</span></td><td>P1</td><td>redis>80%/mysql>80%</td><td>L1/L2</td><td>F2, 30s</td><td>IND-S-015~015d</td><td><span class="tag tag-green">&#10003;</span></td><td class="perm-sa"><button class="btn btn-sm">编辑</button></td></tr>
+                  <tr><td>S-017</td><td>健康度评分</td><td><span class="tag tag-gray">S-系统</span></td><td>P1</td><td>score&lt;70(L1)/&lt;50(L2)</td><td>L1/L2/报告</td><td>F2+F4</td><td>IND-S-017,017a</td><td><span class="tag tag-green">&#10003;</span></td><td class="perm-sa"><button class="btn btn-sm">编辑</button></td></tr>
+                  <tr><td>S-018</td><td>Canary告警探针</td><td><span class="tag tag-gray">S-系统</span></td><td>P1</td><td>2次连续失败</td><td>L2/L3</td><td>F1, 15min</td><td>IND-S-018</td><td><span class="tag tag-green">&#10003;</span></td><td class="perm-sa"><button class="btn btn-sm">编辑</button></td></tr>
+                  <tr><td>E-001</td><td>净Delta过高</td><td><span class="tag tag-blue">E-敞口</span></td><td>P1</td><td>delta>10</td><td>R2</td><td>F1, 5s</td><td>IND-E-001</td><td><span class="tag tag-green">&#10003;</span></td><td class="perm-sa"><button class="btn btn-sm">编辑</button></td></tr>
+                  <tr><td>M-001</td><td>波动率异常</td><td><span class="tag tag-purple">M-市场</span></td><td>P2</td><td>vol>3x avg</td><td>L1</td><td>F1, 5s</td><td>IND-M-001</td><td><span class="tag tag-green">&#10003;</span></td><td class="perm-sa"><button class="btn btn-sm">编辑</button></td></tr>
+                  <tr><td>P-001</td><td>净头寸硬限</td><td><span class="tag tag-orange">P-盈亏</span></td><td>P0</td><td>position>limit</td><td>R0</td><td>F1, 1s</td><td>IND-P-001</td><td><span class="tag tag-green">&#10003;</span></td><td class="perm-sa"><button class="btn btn-sm">编辑</button></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rule Binding View (from rule) -->
+        <div id="rule-binding-view" style="display:none;">
+          <div class="card-grid" style="grid-template-columns: 260px 1fr; gap: 16px;">
+            <div class="card" style="padding: 12px;">
+              <div class="card-title" style="font-size: 13px;">选择规则</div>
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <div class="tree-node selected" onclick="this.parentElement.querySelectorAll('.tree-node').forEach(n=>n.classList.remove('selected'));this.classList.add('selected');">&#128208; E-001 净Delta过高</div>
+                <div class="tree-node" onclick="this.parentElement.querySelectorAll('.tree-node').forEach(n=>n.classList.remove('selected'));this.classList.add('selected');">&#128208; E-002 Gamma集中度</div>
+                <div class="tree-node" onclick="this.parentElement.querySelectorAll('.tree-node').forEach(n=>n.classList.remove('selected'));this.classList.add('selected');">&#128208; S-014 Kafka积压</div>
+                <div class="tree-node" onclick="this.parentElement.querySelectorAll('.tree-node').forEach(n=>n.classList.remove('selected'));this.classList.add('selected');">&#128208; S-017 健康度</div>
+                <div class="tree-node" onclick="this.parentElement.querySelectorAll('.tree-node').forEach(n=>n.classList.remove('selected'));this.classList.add('selected');">&#128208; P-001 净头寸硬限</div>
+                <div class="tree-node" onclick="this.parentElement.querySelectorAll('.tree-node').forEach(n=>n.classList.remove('selected'));this.classList.add('selected');">&#128208; M-001 波动率</div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title">E-001 净Delta过高 — 分层绑定概览</div>
+              <div class="binding-tree" style="padding: 8px 0;">
+                <div style="margin-bottom: 8px; padding: 8px 12px; background: #fafafa; border-radius: 6px;">
+                  <strong>默认模板</strong>: threshold=10, cooldown=300, action=R2, priority=P1
+                </div>
+                <div style="padding: 4px 0;">
+                  <span class="level-label">&#127760; Global:</span> <span class="inherited">[继承默认]</span>
+                </div>
+                <div class="level" style="padding: 4px 0 4px 12px;">
+                  <div><span class="level-label">&#128193; BTC做市项目-币安 (Project):</span> <span class="override">threshold=8 (覆盖)</span></div>
+                  <div class="level" style="padding: 4px 0 4px 12px;">
+                    <div><span class="level-label">&#128194; 内部量化组 (Team):</span> <span class="override">cooldown=600 (覆盖)</span>, threshold=8 (继承自Project)</div>
+                    <div class="level" style="padding: 4px 0 4px 12px;">
+                      <div><span class="level-label">&#128196; mm-btc-binance-01 (Strategy):</span> <span class="inherited">[继承Team配置]</span></div>
+                      <div class="level" style="padding: 4px 0 4px 12px;">
+                        <div><span class="level-label">&#128273; 币安合约账户-01 (Account):</span> <span class="override">threshold=12 (覆盖，放宽)</span> <button class="btn btn-sm perm-edit" style="margin-left: 8px;" onclick="showModal()">编辑绑定</button></div>
+                        <div><span class="level-label">&#128273; 币安合约账户-02 (Account):</span> <span class="inherited">[继承Strategy配置]</span> <button class="btn btn-sm perm-edit" style="margin-left: 8px;" onclick="showModal()">编辑绑定</button></div>
+                      </div>
+                    </div>
+                    <div class="level" style="padding: 4px 0 4px 12px;">
+                      <div><span class="level-label">&#128196; mm-eth-binance-01 (Strategy):</span> <span class="inherited">[继承Team配置]</span></div>
+                      <div class="level" style="padding: 4px 0 4px 12px;">
+                        <div><span class="level-label">&#128273; 币安合约账户-03 (Account):</span> <span class="inherited">[继承Strategy配置]</span> <button class="btn btn-sm perm-edit" style="margin-left: 8px;" onclick="showModal()">编辑绑定</button></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="level" style="padding: 4px 0 4px 12px;">
+                    <div><span class="level-label">&#128194; PartnerA (Team):</span> <span class="override">threshold=5 (覆盖，更严格)</span></div>
+                    <div class="level" style="padding: 4px 0 4px 12px;">
+                      <div><span class="level-label">&#128273; 币安现货账户-PA01 (Account):</span> <span class="inherited">[继承Team配置]</span> <button class="btn btn-sm perm-edit" style="margin-left: 8px;" onclick="showModal()">编辑绑定</button></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Object View (from object) -->
+        <div id="rule-object-view" style="display:none;">
+          <div class="card-grid" style="grid-template-columns: 260px 1fr; gap: 16px;">
+            <div class="card" style="padding: 12px;">
+              <div class="card-title" style="font-size: 13px;">选择对象</div>
+              <div class="tree" id="ruleObjectTree"></div>
+            </div>
+            <div class="card">
+              <div class="card-title">币安合约账户-01 — 全部生效规则</div>
+              <div style="margin-bottom: 8px; font-size: 12px; color: var(--text-secondary);">
+                路径: BTC做市项目-币安 &gt; 内部量化组 &gt; mm-btc-binance-01 &gt; 币安合约账户-01
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>规则</th><th>名称</th><th>状态</th><th>来源</th><th>关键阈值</th><th>动作</th><th>最近命中</th><th class="perm-edit">操作</th></tr></thead>
+                  <tbody>
+                    <tr><td>P-001</td><td>净头寸硬限</td><td><span class="tag tag-green">&#10003;</span></td><td><span class="source source-global">Global</span></td><td>默认</td><td>R0</td><td>从未</td><td class="perm-edit"><button class="btn btn-sm" onclick="showModal()">覆盖</button></td></tr>
+                    <tr><td>E-001</td><td>净Delta过高</td><td><span class="tag tag-green">&#10003;</span></td><td><span class="source source-account">Account&#8595;</span></td><td>threshold=12</td><td>R2</td><td style="color:var(--warning);">14:23</td><td class="perm-edit"><button class="btn btn-sm" onclick="showModal()">编辑</button></td></tr>
+                    <tr><td>E-002</td><td>Gamma集中度</td><td><span class="tag tag-green">&#10003;</span></td><td><span class="source source-account">Account&#8595;</span></td><td>gamma>0.5</td><td>R1</td><td>昨天</td><td class="perm-edit"><button class="btn btn-sm" onclick="showModal()">编辑</button></td></tr>
+                    <tr><td>M-001</td><td>波动率异常</td><td><span class="tag tag-red">&#10007;</span></td><td><span class="source source-disabled">Team&#10007;</span></td><td>-</td><td>-</td><td>-</td><td class="perm-edit"><button class="btn btn-sm" onclick="showModal()">恢复</button></td></tr>
+                    <tr><td>S-001</td><td>WS连接中断</td><td><span class="tag tag-green">&#10003;</span></td><td><span class="source source-global">Global</span></td><td>默认</td><td>R2</td><td>3天前</td><td class="perm-edit"><button class="btn btn-sm" onclick="showModal()">覆盖</button></td></tr>
+                    <tr><td>S-014</td><td>Kafka积压</td><td><span class="tag tag-green">&#10003;</span></td><td><span class="source source-global">Global</span></td><td>lag>100</td><td>L1</td><td style="color:var(--warning);">14:20</td><td class="perm-edit">-</td></tr>
+                    <tr><td>S-017</td><td>健康度评分</td><td><span class="tag tag-green">&#10003;</span></td><td><span class="source source-global">Global</span></td><td>score&lt;70</td><td>L2</td><td>昨天</td><td class="perm-edit">-</td></tr>
+                    <tr><td>P-003</td><td>盈亏偏离</td><td><span class="tag tag-green">&#10003;</span></td><td><span class="source source-project">Project</span></td><td>pnl_dev>5%</td><td>R2</td><td style="color:var(--warning);">13:52</td><td class="perm-edit"><button class="btn btn-sm" onclick="showModal()">覆盖</button></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Diff View -->
+        <div id="rule-diff-view" style="display:none;">
+          <div class="card section">
+            <div class="card-title">配置差异对比</div>
+            <div class="filter-bar" style="margin-bottom: 12px;">
+              <select><option>E-001 净Delta过高</option><option>E-002 Gamma集中度</option><option>S-014 Kafka积压</option></select>
+              <select><option>左: 默认模板</option><option>左: Global</option><option>左: Project</option></select>
+              <select><option>右: Account-币安合约账户-01</option><option>右: Team-内部量化组</option><option>右: Strategy-mm-btc</option></select>
+              <button class="btn btn-primary btn-sm">对比</button>
+            </div>
+            <div class="diff-container">
+              <div class="diff-col">
+                <h4>默认模板 (E-001)</h4>
+                <div class="diff-row"><span>threshold</span><span>10</span></div>
+                <div class="diff-row"><span>cooldown</span><span>300</span></div>
+                <div class="diff-row"><span>action</span><span>R2</span></div>
+                <div class="diff-row"><span>priority</span><span>P1</span></div>
+                <div class="diff-row"><span>enabled</span><span>true</span></div>
+              </div>
+              <div class="diff-col">
+                <h4>币安合约账户-01 (生效配置)</h4>
+                <div class="diff-row"><span>threshold</span><span class="diff-changed">12 <span class="diff-arrow">&larr; Account覆盖</span></span></div>
+                <div class="diff-row"><span>cooldown</span><span class="diff-changed">600 <span class="diff-arrow">&larr; Team覆盖</span></span></div>
+                <div class="diff-row"><span>action</span><span>R2</span></div>
+                <div class="diff-row"><span>priority</span><span>P1</span></div>
+                <div class="diff-row"><span>enabled</span><span>true</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== CHANGES ==================== -->
+      <div class="page" id="page-changes">
+        <div class="filter-bar">
+          <select><option>全部状态</option><option>draft</option><option>pending_approval</option><option>approved</option><option>published</option><option>rolled_back</option></select>
+          <select><option>全部风险</option><option>&#128994; 低</option><option>&#128992; 中</option><option>&#128308; 高</option></select>
+          <select><option>全部类型</option><option>规则绑定</option><option>指标配置</option><option>对象管理</option></select>
+          <input type="text" placeholder="搜索..." style="width: 160px;">
+        </div>
+        <div class="card">
+          <div class="card-title">变更列表 <span class="subtitle">双轨配置发布: Draft &rarr; Preview &rarr; Approval &rarr; Publish</span></div>
+          <table>
+            <thead><tr><th>变更ID</th><th>类型</th><th>内容摘要</th><th>影响范围</th><th>风险</th><th>提交人</th><th>审批人</th><th>状态</th><th class="perm-edit">操作</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>CHG-0042</td>
+                <td><span class="tag tag-blue">规则绑定</span></td>
+                <td>E-001 Account-01 threshold 10&rarr;12</td>
+                <td>1 账户</td>
+                <td>&#128992;</td>
+                <td>trader-a</td>
+                <td>admin-a</td>
+                <td><span class="change-status cs-pending">pending_approval</span></td>
+                <td class="perm-edit">
+                  <button class="btn btn-sm btn-primary perm-admin" onclick="showToast('已审批变更 CHG-0042')">审批</button>
+                  <button class="btn btn-sm perm-admin" onclick="showToast('已拒绝变更 CHG-0042')">拒绝</button>
+                </td>
+              </tr>
+              <tr>
+                <td>CHG-0041</td>
+                <td><span class="tag tag-blue">规则绑定</span></td>
+                <td>M-001 Team-内部量化组 显式关闭</td>
+                <td>3 账户</td>
+                <td>&#128992;</td>
+                <td>admin-a</td>
+                <td>sa</td>
+                <td><span class="change-status cs-published">published</span></td>
+                <td class="perm-edit">
+                  <button class="btn btn-sm perm-sa" onclick="showToast('回滚变更 CHG-0041 (SuperAdmin only)')">回滚</button>
+                </td>
+              </tr>
+              <tr>
+                <td>CHG-0040</td>
+                <td><span class="tag tag-blue">规则绑定</span></td>
+                <td>E-002 Account-01 gamma阈值覆盖</td>
+                <td>1 账户</td>
+                <td>&#128994;</td>
+                <td>trader-a</td>
+                <td>-</td>
+                <td><span class="change-status cs-published">published</span></td>
+                <td class="perm-edit">
+                  <button class="btn btn-sm perm-sa" onclick="showToast('回滚变更 CHG-0040')">回滚</button>
+                </td>
+              </tr>
+              <tr>
+                <td>CHG-0039</td>
+                <td><span class="tag tag-orange">指标配置</span></td>
+                <td>IND-S-014 freshness SLA 10s&rarr;15s</td>
+                <td>全局</td>
+                <td>&#128308;</td>
+                <td>admin-b</td>
+                <td>sa</td>
+                <td><span class="change-status cs-approved">approved</span></td>
+                <td class="perm-edit">
+                  <button class="btn btn-sm btn-primary perm-admin" onclick="showToast('已发布变更 CHG-0039')">发布</button>
+                </td>
+              </tr>
+              <tr>
+                <td>CHG-0038</td>
+                <td><span class="tag tag-blue">规则绑定</span></td>
+                <td>S-017 全局 score阈值 70&rarr;60</td>
+                <td>全部账户</td>
+                <td>&#128308;</td>
+                <td>admin-a</td>
+                <td>sa</td>
+                <td><span class="change-status cs-rolled_back">rolled_back</span></td>
+                <td class="perm-edit">-</td>
+              </tr>
+              <tr>
+                <td>CHG-0037</td>
+                <td><span class="tag tag-gray">对象管理</span></td>
+                <td>新增 Account 币安合约账户-04</td>
+                <td>1 账户</td>
+                <td>&#128994;</td>
+                <td>admin-a</td>
+                <td>-</td>
+                <td><span class="change-status cs-draft">draft</span></td>
+                <td class="perm-edit">
+                  <button class="btn btn-sm" onclick="showToast('预览影响分析 (原型)')">预览</button>
+                  <button class="btn btn-sm btn-primary perm-admin" onclick="showToast('提交审批')">提交</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ==================== ACCESS ==================== -->
+      <div class="page" id="page-access">
+        <div class="card-grid grid-4 section">
+          <div class="card stat-card"><div class="stat-value" style="color: #722ed1;">2</div><div class="stat-label">SuperAdmin</div></div>
+          <div class="card stat-card"><div class="stat-value" style="color: var(--primary);">5</div><div class="stat-label">Admin</div></div>
+          <div class="card stat-card"><div class="stat-value" style="color: #13c2c2;">12</div><div class="stat-label">Trader</div></div>
+          <div class="card stat-card"><div class="stat-value" style="color: #8c8c8c;">3</div><div class="stat-label">Viewer</div></div>
+        </div>
+        <div class="card section">
+          <div class="card-title">
+            用户与角色管理
+            <button class="btn btn-primary btn-sm" onclick="showToast('新增用户 (原型演示)')">+ 新增用户</button>
+          </div>
+          <table class="user-table">
+            <thead><tr><th>用户名</th><th>邮箱</th><th>角色</th><th>Scope</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>sa-root</td><td>root@company.com</td><td><span class="role-tag role-sa">SuperAdmin</span></td><td>global</td><td><span class="tag tag-green">active</span></td><td><button class="btn btn-sm">编辑</button></td></tr>
+              <tr><td>sa-backup</td><td>backup@company.com</td><td><span class="role-tag role-sa">SuperAdmin</span></td><td>global</td><td><span class="tag tag-green">active</span></td><td><button class="btn btn-sm">编辑</button></td></tr>
+              <tr><td>admin-a</td><td>admin-a@company.com</td><td><span class="role-tag role-adm">Admin</span></td><td>Project: BTC做市项目-币安</td><td><span class="tag tag-green">active</span></td><td><button class="btn btn-sm">编辑</button></td></tr>
+              <tr><td>admin-b</td><td>admin-b@company.com</td><td><span class="role-tag role-adm">Admin</span></td><td>global</td><td><span class="tag tag-green">active</span></td><td><button class="btn btn-sm">编辑</button></td></tr>
+              <tr><td>trader-a</td><td>trader-a@company.com</td><td><span class="role-tag role-trd">Trader</span></td><td>Team: 内部量化组</td><td><span class="tag tag-green">active</span></td><td><button class="btn btn-sm">编辑</button></td></tr>
+              <tr><td>trader-b</td><td>trader-b@company.com</td><td><span class="role-tag role-trd">Trader</span></td><td>Team: PartnerA</td><td><span class="tag tag-green">active</span></td><td><button class="btn btn-sm">编辑</button></td></tr>
+              <tr><td>viewer-ops</td><td>ops@company.com</td><td><span class="role-tag role-vw">Viewer</span></td><td>global</td><td><span class="tag tag-green">active</span></td><td><button class="btn btn-sm">编辑</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card section">
+          <div class="card-title">权限矩阵概览</div>
+          <table>
+            <thead><tr><th>操作</th><th>SuperAdmin</th><th>Admin</th><th>Trader</th><th>Viewer</th></tr></thead>
+            <tbody>
+              <tr><td>修改规则模板</td><td><span class="tag tag-green">&#10003;</span></td><td><span class="tag tag-gray">&#10007;</span></td><td><span class="tag tag-gray">&#10007;</span></td><td><span class="tag tag-gray">&#10007;</span></td></tr>
+              <tr><td>创建/修改规则绑定</td><td><span class="tag tag-green">&#10003;</span></td><td><span class="tag tag-green">&#10003; scope内</span></td><td><span class="tag tag-orange">&#10003; 低风险</span></td><td><span class="tag tag-gray">&#10007;</span></td></tr>
+              <tr><td>审批高风险变更</td><td><span class="tag tag-green">&#10003;</span></td><td><span class="tag tag-gray">&#10007;</span></td><td><span class="tag tag-gray">&#10007;</span></td><td><span class="tag tag-gray">&#10007;</span></td></tr>
+              <tr><td>审批中风险变更</td><td><span class="tag tag-green">&#10003;</span></td><td><span class="tag tag-green">&#10003;</span></td><td><span class="tag tag-gray">&#10007;</span></td><td><span class="tag tag-gray">&#10007;</span></td></tr>
+              <tr><td>确认告警</td><td><span class="tag tag-green">&#10003;</span></td><td><span class="tag tag-green">&#10003;</span></td><td><span class="tag tag-green">&#10003; scope内</span></td><td><span class="tag tag-gray">&#10007;</span></td></tr>
+              <tr><td>回滚配置</td><td><span class="tag tag-green">&#10003;</span></td><td><span class="tag tag-gray">&#10007;</span></td><td><span class="tag tag-gray">&#10007;</span></td><td><span class="tag tag-gray">&#10007;</span></td></tr>
+              <tr><td>管理用户/角色</td><td><span class="tag tag-green">&#10003;</span></td><td><span class="tag tag-gray">&#10007;</span></td><td><span class="tag tag-gray">&#10007;</span></td><td><span class="tag tag-gray">&#10007;</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Rule Binding Editor -->
+<div class="modal-overlay" id="bindingModal">
+  <div class="modal">
+    <div class="modal-title">
+      规则绑定配置 — E-001 净Delta过高
+      <button class="modal-close" onclick="hideModal()">&times;</button>
+    </div>
+    <div style="margin-bottom: 12px; padding: 8px 12px; background: #f0f5ff; border-radius: 6px; font-size: 12px;">
+      对象: 币安合约账户-01 (Account) &middot; 路径: BTC做市项目 &gt; 内部量化组 &gt; mm-btc-binance-01
+    </div>
+    <div class="config-form">
+      <div class="form-group">
+        <div class="form-label">启用状态</div>
+        <div class="form-row">
+          <label><input type="radio" name="enabled" checked> 继承 (&#10003; 启用, 来自 Team)</label>
+        </div>
+        <div class="form-row">
+          <label><input type="radio" name="enabled"> 覆盖启用</label>
+        </div>
+        <div class="form-row">
+          <label><input type="radio" name="enabled"> 显式关闭</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="form-label">阈值 threshold</div>
+        <div class="form-row">
+          <label><input type="radio" name="threshold"> 继承 <span class="inherited-hint">(8, 来自 Project)</span></label>
+        </div>
+        <div class="form-row">
+          <label><input type="radio" name="threshold" checked> 覆盖:</label>
+          <input type="number" value="12">
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="form-label">冷却时间 cooldown (秒)</div>
+        <div class="form-row">
+          <label><input type="radio" name="cooldown" checked> 继承 <span class="inherited-hint">(600, 来自 Team)</span></label>
+        </div>
+        <div class="form-row">
+          <label><input type="radio" name="cooldown"> 覆盖:</label>
+          <input type="number" value="">
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="form-label">优先级 priority</div>
+        <div class="form-row">
+          <label><input type="radio" name="priority" checked> 继承 <span class="inherited-hint">(P1, 来自 Global)</span></label>
+        </div>
+        <div class="form-row">
+          <label><input type="radio" name="priority"> 覆盖:</label>
+          <select style="padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;">
+            <option>P0</option><option selected>P1</option><option>P2</option><option>P3</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="form-label">动作 action</div>
+        <div class="form-row">
+          <label><input type="radio" name="action" checked> 继承 <span class="inherited-hint">(R2, 来自 Global)</span></label>
+        </div>
+        <div class="form-row">
+          <label><input type="radio" name="action"> 覆盖:</label>
+          <select style="padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;">
+            <option>R0</option><option>R1</option><option selected>R2</option><option>R3</option>
+          </select>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 20px;">
+        <button class="btn btn-primary" onclick="hideModal(); showToast('已保存为草稿，等待审批发布')">保存为草稿</button>
+        <button class="btn" onclick="hideModal()">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ==========================
+// Data
+// ==========================
+const dimensions = [
+  { name: '数据采集层', score: 95, color: '#52c41a' },
+  { name: '指标产出层', score: 90, color: '#52c41a' },
+  { name: '规则执行层', score: 94, color: '#52c41a' },
+  { name: '告警投递层', score: 96, color: '#52c41a' },
+  { name: '基础设施层', score: 82, color: '#faad14' },
+];
+
+const chainItems = [
+  { name: 'WS公共', ok: true },
+  { name: 'WS私有', ok: true },
+  { name: 'Kafka', ok: false, warn: true },
+  { name: 'Redis', ok: true },
+  { name: 'MySQL', ok: true },
+  { name: 'RuleEngine', ok: true },
+  { name: 'Watchdog', ok: true },
+  { name: 'Notifier', ok: true },
+  { name: 'Canary', ok: true },
+];
+
+const objectTree = {
+  name: 'BTC做市项目-币安', type: 'Project', icon: '\u{1F4C1}',
+  children: [
+    { name: '内部量化组', type: 'Team', icon: '\u{1F4C2}', children: [
+      { name: 'mm-btc-binance-01', type: 'Strategy', icon: '\u{1F4C4}', children: [
+        { name: '币安合约账户-01', type: 'Account', icon: '\u{1F511}', selected: true },
+        { name: '币安合约账户-02', type: 'Account', icon: '\u{1F511}' },
+      ]},
+      { name: 'mm-eth-binance-01', type: 'Strategy', icon: '\u{1F4C4}', children: [
+        { name: '币安合约账户-03', type: 'Account', icon: '\u{1F511}' },
+      ]},
+    ]},
+    { name: 'PartnerA', type: 'Team', icon: '\u{1F4C2}', children: [
+      { name: '币安现货账户-PA01', type: 'Account', icon: '\u{1F511}' },
+    ]},
+  ]
+};
+
+const roleConfig = {
+  super_admin: {
+    label: 'SuperAdmin', icon: '\u{1F451}',
+    pages: ['home','health','alerts','objects','indicators','rules','changes','access'],
+    canEdit: true, canApprove: true, canAdmin: true, canSA: true
+  },
+  admin: {
+    label: 'Admin', icon: '\u{1F6E1}',
+    pages: ['home','health','alerts','objects','indicators','rules','changes'],
+    canEdit: true, canApprove: true, canAdmin: true, canSA: false
+  },
+  trader: {
+    label: 'Trader', icon: '\u{1F4C8}',
+    pages: ['home','health','alerts','objects','indicators','rules','changes'],
+    canEdit: true, canApprove: false, canAdmin: false, canSA: false
+  },
+  viewer: {
+    label: 'Viewer', icon: '\u{1F440}',
+    pages: ['home','health','alerts','objects','indicators'],
+    canEdit: false, canApprove: false, canAdmin: false, canSA: false
+  },
+};
+
+let currentRole = 'super_admin';
+let currentPage = 'home';
+
+// ==========================
+// Navigation
+// ==========================
+function navigate(page) {
+  const cfg = roleConfig[currentRole];
+  if (!cfg.pages.includes(page)) {
+    showToast('当前角色无权访问此页面');
+    return;
+  }
+  currentPage = page;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+  document.querySelector('[data-page="' + page + '"]').classList.add('active');
+
+  const titles = { home: '总览', health: '系统健康度', alerts: '告警中心', objects: '对象管理', indicators: '指标库', rules: '规则库', changes: '变更中心', access: '权限管理' };
+  document.getElementById('pageTitle').textContent = titles[page] || page;
+}
+
+// ==========================
+// Role Switching
+// ==========================
+function switchRole(role) {
+  currentRole = role;
+  const cfg = roleConfig[role];
+  document.getElementById('roleLabel').textContent = cfg.label;
+  document.getElementById('roleIcon').textContent = cfg.icon;
+
+  document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  // Menu visibility
+  document.querySelectorAll('.menu-item').forEach(m => {
+    const pg = m.getAttribute('data-page');
+    m.style.display = cfg.pages.includes(pg) ? 'flex' : 'none';
+  });
+
+  // Permission-based visibility
+  document.querySelectorAll('.perm-edit').forEach(el => {
+    el.style.visibility = cfg.canEdit ? 'visible' : 'hidden';
+  });
+  document.querySelectorAll('.perm-admin').forEach(el => {
+    el.style.display = cfg.canAdmin ? '' : 'none';
+  });
+  document.querySelectorAll('.perm-sa').forEach(el => {
+    el.style.display = cfg.canSA ? '' : 'none';
+  });
+
+  // If current page is hidden, go home
+  if (!cfg.pages.includes(currentPage)) {
+    navigate('home');
+  }
+}
+
+// ==========================
+// Tab switching helpers
+// ==========================
+function switchHealthTab(el, id) {
+  el.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['health-global','health-dims','health-rules','health-capacity','health-reports'].forEach(s => {
+    document.getElementById(s).style.display = s === id ? 'block' : 'none';
+  });
+}
+function switchObjTab(el, id) {
+  el.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['obj-overview','obj-rules','obj-indicators','obj-alerts','obj-changes'].forEach(s => {
+    document.getElementById(s).style.display = s === id ? 'block' : 'none';
+  });
+}
+function switchIndTab(el, id) {
+  el.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['ind-catalog','ind-runtime','ind-config','ind-deps'].forEach(s => {
+    document.getElementById(s).style.display = s === id ? 'block' : 'none';
+  });
+}
+function switchRuleTab(el, id) {
+  el.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['rule-templates','rule-binding-view','rule-object-view','rule-diff-view'].forEach(s => {
+    document.getElementById(s).style.display = s === id ? 'block' : 'none';
+  });
+}
+
+// ==========================
+// Render functions
+// ==========================
+function renderDimensions(containerId) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = dimensions.map(d => {
+    const barColor = d.score >= 90 ? 'var(--success)' : d.score >= 70 ? 'var(--warning)' : 'var(--error)';
+    return `<div class="dim-card">
+      <div class="dim-header">
+        <span class="dim-name">${d.name}</span>
+        <span class="dim-score" style="color: ${d.color}">${d.score}</span>
+      </div>
+      <div class="dim-bar"><div class="dim-bar-fill" style="width: ${d.score}%; background: ${barColor};"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderChain(containerId) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = chainItems.map(c => {
+    const cls = c.ok ? '' : (c.warn ? ' warn' : ' error');
+    const icon = c.ok ? '\u2705' : (c.warn ? '\u26A0\uFE0F' : '\u274C');
+    return `<span class="chain-item${cls}">${icon} ${c.name}</span>`;
+  }).join('');
+}
+
+function renderTree(container, node, depth) {
+  const el = document.createElement('div');
+  const nodeDiv = document.createElement('div');
+  nodeDiv.className = 'tree-node' + (node.selected ? ' selected' : '');
+  nodeDiv.style.paddingLeft = (depth * 16 + 8) + 'px';
+  nodeDiv.innerHTML = `<span class="tree-icon">${node.icon}</span> ${node.name}`;
+  nodeDiv.onclick = function(e) {
+    e.stopPropagation();
+    container.querySelectorAll('.tree-node').forEach(n => n.classList.remove('selected'));
+    this.classList.add('selected');
+  };
+  el.appendChild(nodeDiv);
+  if (node.children) {
+    node.children.forEach(child => renderTree(el, child, depth + 1));
+  }
+  container.appendChild(el);
+}
+
+function renderHealthTrend() {
+  const container = document.getElementById('healthTrend');
+  const data = [88,90,92,91,93,94,95,95,94,68,72,80,88,92,93,94,95,95,92,92,93,94,92,92];
+  container.innerHTML = data.map(v => {
+    const h = Math.max(10, (v / 100) * 120);
+    const c = v >= 90 ? 'var(--success)' : v >= 70 ? 'var(--warning)' : 'var(--error)';
+    return `<div style="flex:1; height:${h}px; background:${c}; opacity:0.6; border-radius: 2px 2px 0 0; position:relative;" title="Score: ${v}"></div>`;
+  }).join('');
+}
+
+function renderHealthDims() {
+  const container = document.getElementById('healthDimDetail');
+  const dimDetails = [
+    { name: '数据采集层', score: 95, items: [
+      { name: '公共WS连接', score: 100, detail: 'connected' },
+      { name: '私有WS连接', score: 100, detail: 'connected' },
+      { name: '数据快照年龄', score: 85, detail: 'avg 1.2s' },
+      { name: 'Kafka lag(数据侧)', score: 92, detail: 'lag=12' },
+    ]},
+    { name: '指标产出层', score: 90, items: [
+      { name: '指标覆盖率', score: 98, detail: '98%' },
+      { name: '指标计算延迟P99', score: 88, detail: '45ms' },
+      { name: '指标静默数', score: 85, detail: '0 silent' },
+    ]},
+    { name: '规则执行层', score: 94, items: [
+      { name: '规则执行延迟P99', score: 95, detail: '12ms' },
+      { name: '规则评估覆盖率', score: 98, detail: '100%' },
+      { name: '误触发率', score: 90, detail: '0.5%' },
+    ]},
+    { name: '告警投递层', score: 96, items: [
+      { name: 'Telegram投递延迟', score: 95, detail: '1.2s' },
+      { name: 'Canary探针成功率', score: 100, detail: '100%' },
+      { name: '告警去重有效率', score: 92, detail: '95%' },
+    ]},
+    { name: '基础设施层', score: 82, items: [
+      { name: 'Kafka consumer lag', score: 65, detail: 'lag=1250 \u26A0' },
+      { name: 'Redis内存', score: 85, detail: '62%' },
+      { name: 'MySQL连接池', score: 90, detail: '38%' },
+      { name: 'Service CPU', score: 88, detail: '35%' },
+    ]},
+  ];
+
+  container.innerHTML = dimDetails.map(d => {
+    const barColor = d.score >= 90 ? 'var(--success)' : d.score >= 70 ? 'var(--warning)' : 'var(--error)';
+    return `<div class="card">
+      <div class="card-title">${d.name} <span style="font-size: 24px; font-weight: 700; color: ${barColor};">${d.score}</span></div>
+      <div class="progress-ring" style="margin-bottom: 16px;"><div class="progress-ring-fill" style="width:${d.score}%; background:${barColor};"></div></div>
+      <table>
+        <thead><tr><th>子项</th><th>分数</th><th>详情</th></tr></thead>
+        <tbody>${d.items.map(i => {
+          const ic = i.score >= 90 ? 'var(--success)' : i.score >= 70 ? 'var(--warning)' : 'var(--error)';
+          return `<tr><td>${i.name}</td><td style="font-weight:600; color:${ic};">${i.score}</td><td>${i.detail}</td></tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+}
+
+// ==========================
+// Modal
+// ==========================
+function showModal() {
+  if (!roleConfig[currentRole].canEdit) {
+    showToast('当前角色无编辑权限');
+    return;
+  }
+  document.getElementById('bindingModal').classList.add('show');
+}
+function hideModal() {
+  document.getElementById('bindingModal').classList.remove('show');
+}
+
+// ==========================
+// Toast
+// ==========================
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ==========================
+// Time
+// ==========================
+function updateTime() {
+  const now = new Date();
+  document.getElementById('headerTime').textContent = now.toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+}
+
+// ==========================
+// Init
+// ==========================
+function init() {
+  renderDimensions('homeDimensions');
+  renderChain('homeChain');
+  renderHealthTrend();
+  renderHealthDims();
+
+  // Object trees
+  const objectTreeEl = document.getElementById('objectTree');
+  renderTree(objectTreeEl, objectTree, 0);
+
+  const ruleObjectTreeEl = document.getElementById('ruleObjectTree');
+  renderTree(ruleObjectTreeEl, objectTree, 0);
+
+  updateTime();
+  setInterval(updateTime, 1000);
+
+  // Apply initial role
+  switchRole('super_admin');
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

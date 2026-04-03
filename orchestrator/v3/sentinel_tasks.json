@@ -1,0 +1,240 @@
+{
+  "meta": {
+    "project": "CEX 做市风控系统 — Sentinel 最小闭环",
+    "version": "Sentinel-MVP",
+    "plan_doc": "docs/day1_minimal_loop_plan.md",
+    "description": "单进程风控哨兵：Binance REST 轮询（含统一账户 PM）→ Redis → 规则引擎 → Telegram 告警",
+    "estimated_hours": 6,
+    "agents": {
+      "α": {
+        "name": "Agent-Alpha",
+        "role": "Foundation + Integration",
+        "description": "共享契约（types/config）+ 主程序串接 + 编译验证",
+        "branch": "sentinel/alpha",
+        "dirs": [
+          "internal/sentinel/types.go",
+          "internal/sentinel/config.go",
+          "cmd/risk-sentinel/main.go"
+        ]
+      },
+      "β": {
+        "name": "Agent-Beta",
+        "role": "Data Layer",
+        "description": "Binance REST 客户端（普通+PM，含 HTTP Proxy）+ 数据采集器",
+        "branch": "sentinel/beta",
+        "dirs": [
+          "internal/sentinel/client.go",
+          "internal/sentinel/collector.go"
+        ]
+      },
+      "γ": {
+        "name": "Agent-Gamma",
+        "role": "Rules + Alert",
+        "description": "6 条 P0 规则实现 + Telegram 告警模块 + 规则调度引擎",
+        "branch": "sentinel/gamma",
+        "dirs": [
+          "internal/sentinel/rules.go",
+          "internal/sentinel/alerter.go",
+          "internal/sentinel/engine.go"
+        ]
+      }
+    }
+  },
+
+  "constraints": {
+    "proxy": {
+      "description": "所有访问交易所 REST API 的 HTTP 请求必须通过可配置的 HTTP 代理",
+      "config_field": "system.http_proxy",
+      "default_value": "127.0.0.1:7897",
+      "implementation": "每个 http.Client 创建时检查 proxy 配置，非空则设置 Transport.Proxy"
+    },
+    "portfolio_margin": {
+      "description": "同时支持普通合约 (/fapi/) 和统一账户 (/papi/) 两种接口",
+      "detection": "通过 config.toml 中 account_type 字段指定，不做运行时自动检测"
+    },
+    "coding_standards": {
+      "language": "Go 1.22",
+      "comments": "中文注释",
+      "error_handling": "显式检查，fmt.Errorf 包装上下文，禁止 recover 兜底",
+      "testing": "每文件配 _test.go（Wave 2 阶段补充）",
+      "commit_format": "feat|fix|test(sentinel): 中文描述"
+    }
+  },
+
+  "gates": {
+    "gate-s0": {
+      "name": "契约就绪",
+      "description": "共享类型和配置可编译，Redis 可连接",
+      "checks": [
+        { "id": "gs0-types",  "cmd": "go build ./internal/sentinel/...", "expect": "exit 0" },
+        { "id": "gs0-config", "cmd": "grep 'account_type' config.toml", "expect": "exit 0" }
+      ],
+      "unlocks": ["β-01", "γ-01"]
+    },
+    "gate-s1": {
+      "name": "模块就绪",
+      "description": "client + collector + rules + alerter + engine 各模块独立编译通过",
+      "depends_on_gate": "gate-s0",
+      "checks": [
+        { "id": "gs1-build", "cmd": "go build ./internal/sentinel/...", "expect": "exit 0" },
+        { "id": "gs1-vet",   "cmd": "go vet ./internal/sentinel/...",  "expect": "exit 0" }
+      ],
+      "unlocks": ["α-03"]
+    },
+    "gate-s2": {
+      "name": "闭环就绪",
+      "description": "risk-sentinel 二进制可编译，--dry-run 模式可启动",
+      "depends_on_gate": "gate-s1",
+      "checks": [
+        { "id": "gs2-build",  "cmd": "go build -o /tmp/risk-sentinel ./cmd/risk-sentinel/", "expect": "exit 0" },
+        { "id": "gs2-dryrun", "cmd": "/tmp/risk-sentinel --config config.toml --dry-run",   "expect": "exit 0" }
+      ],
+      "unlocks": []
+    }
+  },
+
+  "waves": {
+    "wave-0": {
+      "name": "Wave 0: 共享契约 (blocking)",
+      "duration": "30 min",
+      "agent": "α",
+      "description": "创建所有 Agent 依赖的共享类型、配置、接口定义。其他 Agent 必须等此完成。",
+      "tasks": ["α-01", "α-02"],
+      "target_gate": "gate-s0"
+    },
+    "wave-1": {
+      "name": "Wave 1: 三路并行开发",
+      "duration": "2.5 h",
+      "agents": ["α", "β", "γ"],
+      "description": "Agent-β 实现数据层，Agent-γ 实现规则+告警层，Agent-α 准备 main.go 骨架",
+      "tasks": ["α-03-prep", "β-01", "β-02", "γ-01", "γ-02", "γ-03"],
+      "target_gate": "gate-s1"
+    },
+    "wave-2": {
+      "name": "Wave 2: 集成 + 验证",
+      "duration": "1 h",
+      "agent": "α",
+      "description": "Agent-α 将所有模块串接到 main.go，编译验证，补充 config.toml",
+      "tasks": ["α-03", "α-04"],
+      "target_gate": "gate-s2"
+    }
+  },
+
+  "tasks": {
+    "α-01": {
+      "agent": "α",
+      "title": "共享类型定义 types.go + config.go",
+      "hours": 0.5,
+      "depends": [],
+      "gate_unlock": null,
+      "wave": 0,
+      "files": ["internal/sentinel/types.go", "internal/sentinel/config.go"],
+      "prompt_ref": "agent_prompts/sentinel_alpha.md §Task α-01"
+    },
+    "α-02": {
+      "agent": "α",
+      "title": "更新 config.toml 添加 sentinel/accounts/rules 配置段",
+      "hours": 0.15,
+      "depends": ["α-01"],
+      "gate_unlock": "gate-s0",
+      "wave": 0,
+      "files": ["config.toml"],
+      "prompt_ref": "agent_prompts/sentinel_alpha.md §Task α-02"
+    },
+    "α-03-prep": {
+      "agent": "α",
+      "title": "main.go 骨架（编译占位，等 Wave 1 完成后填充）",
+      "hours": 0.25,
+      "depends": ["gate-s0"],
+      "gate_unlock": null,
+      "wave": 1,
+      "files": ["cmd/risk-sentinel/main.go"],
+      "prompt_ref": "agent_prompts/sentinel_alpha.md §Task α-03-prep"
+    },
+    "β-01": {
+      "agent": "β",
+      "title": "Binance REST 客户端 client.go（含 Proxy + PM 双模式）",
+      "hours": 1.0,
+      "depends": ["gate-s0"],
+      "gate_unlock": null,
+      "wave": 1,
+      "files": ["internal/sentinel/client.go"],
+      "prompt_ref": "agent_prompts/sentinel_beta.md §Task β-01"
+    },
+    "β-02": {
+      "agent": "β",
+      "title": "数据采集器 collector.go（轮询调度 + Redis 写入）",
+      "hours": 1.0,
+      "depends": ["β-01"],
+      "gate_unlock": null,
+      "wave": 1,
+      "files": ["internal/sentinel/collector.go"],
+      "prompt_ref": "agent_prompts/sentinel_beta.md §Task β-02"
+    },
+    "γ-01": {
+      "agent": "γ",
+      "title": "Telegram 告警模块 alerter.go（含 Proxy + 冷却去重）",
+      "hours": 0.5,
+      "depends": ["gate-s0"],
+      "gate_unlock": null,
+      "wave": 1,
+      "files": ["internal/sentinel/alerter.go"],
+      "prompt_ref": "agent_prompts/sentinel_gamma.md §Task γ-01"
+    },
+    "γ-02": {
+      "agent": "γ",
+      "title": "6 条 P0 规则实现 rules.go",
+      "hours": 1.5,
+      "depends": ["gate-s0"],
+      "gate_unlock": null,
+      "wave": 1,
+      "files": ["internal/sentinel/rules.go"],
+      "prompt_ref": "agent_prompts/sentinel_gamma.md §Task γ-02"
+    },
+    "γ-03": {
+      "agent": "γ",
+      "title": "规则调度引擎 engine.go",
+      "hours": 0.5,
+      "depends": ["γ-01", "γ-02"],
+      "gate_unlock": null,
+      "wave": 1,
+      "files": ["internal/sentinel/engine.go"],
+      "prompt_ref": "agent_prompts/sentinel_gamma.md §Task γ-03"
+    },
+    "α-03": {
+      "agent": "α",
+      "title": "main.go 完整集成（串接 collector + engine + alerter）",
+      "hours": 0.5,
+      "depends": ["gate-s1"],
+      "gate_unlock": null,
+      "wave": 2,
+      "files": ["cmd/risk-sentinel/main.go"],
+      "prompt_ref": "agent_prompts/sentinel_alpha.md §Task α-03"
+    },
+    "α-04": {
+      "agent": "α",
+      "title": "编译验证 + go vet + dry-run 测试",
+      "hours": 0.5,
+      "depends": ["α-03"],
+      "gate_unlock": "gate-s2",
+      "wave": 2,
+      "files": [],
+      "prompt_ref": "agent_prompts/sentinel_alpha.md §Task α-04"
+    }
+  },
+
+  "dependency_dag": {
+    "ascii": [
+      "Wave 0 (blocking)          Wave 1 (parallel)            Wave 2 (integration)",
+      "═══════════════════        ═══════════════════           ═══════════════════",
+      "                                                                            ",
+      "α-01 ──→ α-02 ──→ gate-s0 ──┬──→ β-01 ──→ β-02 ──┐                       ",
+      "  (types)  (config)          │                      │                       ",
+      "                             ├──→ γ-01 (alerter)   ├──→ gate-s1 ──→ α-03 ──→ α-04 ──→ gate-s2",
+      "                             │   γ-02 (rules)──┐   │      (build)   (main)   (verify)  (done!)",
+      "                             │                  └→γ-03    │                                    ",
+      "                             │                  (engine)  │                                    ",
+      "                             └──→ α-03-prep (骨架) ──────┘                                    "
+    ]
+  }
+}

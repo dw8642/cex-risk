@@ -1,0 +1,41 @@
+D3 全天任务已全部完成且通过验证。以下是当前实现状态总结：
+
+## D3 验收清单
+
+### 1. WS 断线自动重连 ✅
+- `reconnect()` 实现指数退避：1s → 2s → 4s → 8s → max 30s
+- `reconnectMu` 防止并发重连，`reconnectCount` 原子计数器记录日志
+- 最大 10 次重试
+
+### 2. listenKey 自动续期 ✅
+- `keepAliveLoop()` 每 30 分钟 PUT `/fapi/v1/listenKey`
+- 续期失败自动触发 `reconnect()`
+
+### 3. listenKey 过期处理 ✅
+- `handleWSMessage()` 检测 `listenKeyExpired` 事件
+- 异步 goroutine 立即调用 `reconnect()` 重新获取 listenKey
+
+### 4. Graceful shutdown ✅
+- `Close()` 使用 `atomic.Bool` CAS 保证幂等
+- 关闭 `stopCh` 通知所有 goroutine → 关闭 WS → `wg.Wait()` 等待退出
+- 适配器层 10s 超时，main 层 30s 超时
+- 关闭所有输出 channel，消费者自然退出
+
+### 5. Goroutine 泄漏检查 ✅
+- `TestGracefulShutdownGoroutines` 验证 shutdown 后 goroutine 数量回落
+- main.go 在 shutdown 后检查 goroutine 数量，>5 则 warn
+
+### 6. 健壮性测试 ✅ (37/37 PASS)
+- `TestReconnectOnWSClose` — WS 断线自动重连
+- `TestListenKeyExpiredReconnect` — listenKey 过期重新获取
+- `TestStressReconnect10Times` — 连续重连 10 次全部恢复
+- `TestConcurrentReconnectDedup` — 并发重连去重
+- `TestReconnectWithListenKeyFailure` — listenKey 创建失败后恢复
+- `TestWSMessageAfterReconnect` — 重连后消息正常接收
+- 以及更多单元测试覆盖正常/边界/错误路径
+
+### 编译 & 测试
+- `go build ./...` ✅ 编译通过
+- `go test ./pkg/exchange/... ./services/exchange-ingestor/...` ✅ 全部 37 个测试 PASS
+
+代码已在 `agent-b/current` 分支上（commit `7facc07` merge 完成），工作树干净，无新改动需要提交。D3 任务在之前的提交中已全部实现。

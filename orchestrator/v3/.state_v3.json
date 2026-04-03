@@ -1,0 +1,13 @@
+{
+  "started_at": "2026-04-02T19:09:57+08:00",
+  "current_sprint": 0,
+  "tasks": {},
+  "gates": {
+    "gate-1": "closed",
+    "gate-2": "closed",
+    "gate-3": "closed",
+    "gate-4": "closed",
+    "gate-5": "closed",
+    "gate-6": "closed"
+  }
+}
